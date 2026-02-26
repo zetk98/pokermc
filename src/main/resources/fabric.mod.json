@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "pokermc",
+  "version": "${version}",
+  "name": "PokerMC",
+  "description": "Play Texas Hold'em Poker in Minecraft multiplayer!",
+  "authors": ["PokerMC"],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/pokermc/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.pokermc.PokerMod"],
+    "client": ["com.pokermc.PokerModClient"]
+  },
+  "mixins": [],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.1",
+    "java": ">=21"
+  }
+}

@@ -1,0 +1,38 @@
+# Gradle
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.classpath
+*.project
+*.factorypath
+
+# Minecraft run directories
+run/
+run2/
+
+# Temp decompile artifacts
+tmp_block/
+tmp_*/
+
+# Stray class files at root
+net/
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (keep template but not personal data)
+config/pokermc_wallets.json
+
+# Logs
+*.log
+logs/
