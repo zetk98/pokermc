@@ -24,15 +24,20 @@ public class CreateRoomScreen extends Screen {
     private static final int C_CYAN   = 0xFF88EEFF;
 
     private static final int[] BET_LEVELS = {1, 10, 100, 1_000, 10_000};
+    private static final int MIN_BALANCE_MULTIPLIER = 10;
 
     private final BlockPos tablePos;
     private final String stateJson;
-    private int selectedLevel = -1; // -1 = none selected yet
+    private int bankBalance = 0;
 
     public CreateRoomScreen(BlockPos tablePos, String stateJson) {
         super(Text.literal("Create Room"));
         this.tablePos  = tablePos;
         this.stateJson = stateJson;
+        try {
+            var obj = com.google.gson.JsonParser.parseString(stateJson).getAsJsonObject();
+            bankBalance = obj.has("bankBalance") ? obj.get("bankBalance").getAsInt() : 0;
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -53,16 +58,20 @@ public class CreateRoomScreen extends Screen {
 
         for (int i = 0; i < BET_LEVELS.length; i++) {
             final int lvl = BET_LEVELS[i];
+            int minRequired = lvl * MIN_BALANCE_MULTIPLIER;
+            boolean canAfford = bankBalance >= minRequired;
             String label = lvl >= 10_000 ? "10K" : lvl >= 1_000 ? "1K" : String.valueOf(lvl);
-            addDrawableChild(ButtonWidget.builder(Text.literal(label + " ZC"),
+            var btn = ButtonWidget.builder(Text.literal(label + " ZC"),
                     b -> {
+                        if (!canAfford) return;
                         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
                                 new PokerNetworking.PlayerActionPayload(tablePos, "CREATE", lvl, ""));
                         PokerTableScreen ts = new PokerTableScreen(tablePos, stateJson);
                         client.setScreen(ts);
                         ts.updateState(stateJson);
                     })
-                    .dimensions(startX + i * (btnW + gap), btnY, btnW, btnH).build());
+                    .dimensions(startX + i * (btnW + gap), btnY, btnW, btnH);
+            addDrawableChild(btn.build()).active = canAfford;
         }
 
         // Confirm button (disabled until level selected — but since we auto-create on click, not needed)
@@ -83,37 +92,24 @@ public class CreateRoomScreen extends Screen {
         drawBorder(ctx, x0,     y0,     W,     H,     C_BORDER, 2);
         drawBorder(ctx, x0 + 4, y0 + 4, W - 8, H - 8, 0xFF5C4A1A, 1);
 
-        // Title
         ctx.drawCenteredTextWithShadow(textRenderer, "♠ CREATE ROOM ♠", cx, y0 + 16, C_GOLD);
-
-        // Sub-title
         ctx.drawCenteredTextWithShadow(textRenderer,
-                "Select big blind (ZC)", cx, y0 + 34, C_WHITE);
-
-        // Divider
+                "Mức cược (BB) · Ví: " + bankBalance + " ZC", cx, y0 + 34, C_WHITE);
         ctx.fill(x0 + 20, y0 + 44, x0 + W - 20, y0 + 45, 0xFF444400);
-
-        // Info rows
         ctx.drawCenteredTextWithShadow(textRenderer,
-                "Starting stack = BB × 100", cx, y0 + 52, C_GRAY);
+                "Vào phòng cần min BB×10 ZC", cx, y0 + 52, C_GRAY);
 
-        // Column headers for the 5 options
         int btnW = 48, gap = 6;
         int totalW = BET_LEVELS.length * (btnW + gap) - gap;
         int startX = cx - totalW / 2;
-        int infoY = y0 + 143;
-
+        int infoY = y0 + 95;
         for (int i = 0; i < BET_LEVELS.length; i++) {
-            int lvl = BET_LEVELS[i];
+            int minReq = BET_LEVELS[i] * MIN_BALANCE_MULTIPLIER;
+            String s = (minReq >= 1_000 ? (minReq / 1000) + "K" : String.valueOf(minReq)) + " ZC";
             int bx = startX + i * (btnW + gap) + btnW / 2;
-            String stack = lvl >= 1_000 ? (lvl * 100 / 1000) + "K" : String.valueOf(lvl * 100);
-            ctx.drawCenteredTextWithShadow(textRenderer, stack + " ZC", bx, infoY, C_CYAN);
-            ctx.drawCenteredTextWithShadow(textRenderer,
-                    "SB:" + Math.max(1, lvl / 2), bx, infoY + 12, C_GRAY);
+            ctx.drawCenteredTextWithShadow(textRenderer, s, bx, infoY,
+                    bankBalance >= minReq ? C_GREEN : C_GRAY);
         }
-
-        // Column label
-        ctx.drawCenteredTextWithShadow(textRenderer, "Starting chips →", cx, infoY - 14, C_GRAY);
 
         super.render(ctx, mouseX, mouseY, delta);
     }

@@ -51,7 +51,8 @@ public class PokerTableBlockEntity extends BlockEntity {
         try {
             viewers.add(player);
             String name = player.getName().getString();
-            String json = PokerNetworking.serializeState(game, name);
+            long worldTime = getWorld() != null ? getWorld().getTime() : 0;
+            String json = PokerNetworking.serializeState(game, name, worldTime);
             net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
                     player, new PokerNetworking.OpenTablePayload(pos, json));
             System.out.println("[PokerMC] Sent OpenTablePayload to " + player.getName().getString()
@@ -64,6 +65,8 @@ public class PokerTableBlockEntity extends BlockEntity {
     }
 
     private static final double MAX_DISTANCE = 5.5;
+    private String lastTimedPlayer = "";
+    private int tickCounter = 0;
 
     // ── Tick ───────────────────────────────────────────────────────────────────
 
@@ -72,7 +75,37 @@ public class PokerTableBlockEntity extends BlockEntity {
         be.viewers.removeIf(p -> !p.isAlive() || p.isDisconnected());
 
         PokerGame game = be.getGame();
-        // Only run distance / immunity logic during an active game
+
+        int turnSec = com.pokermc.config.PokerConfig.get().turnTimeSeconds;
+        if (turnSec > 0) {
+            String cur = game.getCurrentPlayerName();
+            var ph = game.getPhase();
+            if (!cur.isEmpty() && ph != PokerGame.Phase.WAITING && ph != PokerGame.Phase.SHOWDOWN) {
+                if (!cur.equals(be.lastTimedPlayer)) {
+                    be.lastTimedPlayer = cur;
+                    game.setTurnStartTick(world.getTime());
+                } else if (world.getTime() - game.getTurnStartTick() >= turnSec * 20L) {
+                    game.performAction(cur, PokerGame.Action.FOLD, 0);
+                    game.setTurnStartTick(0);
+                    be.lastTimedPlayer = "";
+                    be.markDirty();
+                    PokerNetworking.broadcastState(be);
+                }
+            } else {
+                be.lastTimedPlayer = "";
+            }
+        }
+
+        be.tickCounter++;
+        if (be.tickCounter >= 20) {
+            be.tickCounter = 0;
+            if (!game.getCurrentPlayerName().isEmpty()
+                    && game.getPhase() != PokerGame.Phase.WAITING
+                    && game.getPhase() != PokerGame.Phase.SHOWDOWN) {
+                PokerNetworking.broadcastState(be);
+            }
+        }
+
         if (game.getPhase() == PokerGame.Phase.WAITING
                 || game.getPhase() == PokerGame.Phase.SHOWDOWN) return;
         if (!(world instanceof ServerWorld sw)) return;
@@ -109,6 +142,11 @@ public class PokerTableBlockEntity extends BlockEntity {
             for (String name : toForce) {
                 if (name.equals(game.getCurrentPlayerName()))
                     game.performAction(name, PokerGame.Action.FOLD, 0);
+                game.getPlayers().stream().filter(p -> p.name.equals(name)).findFirst()
+                        .ifPresent(ps -> {
+                            if (ps.chips > 0)
+                                com.pokermc.config.WalletStorage.get().addBalance(name, ps.chips);
+                        });
                 game.removePlayer(name);
                 be.viewers.removeIf(p -> p.getName().getString().equals(name));
             }

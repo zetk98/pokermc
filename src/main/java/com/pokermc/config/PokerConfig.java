@@ -26,6 +26,8 @@ public class PokerConfig {
     public int    minPlayers             = 2;
     /** How long (seconds) join/leave notifications stay on screen. */
     public int    notificationDurationSeconds = 5;
+    /** Seconds per turn; 0 = no limit. */
+    public int    turnTimeSeconds = 30;
 
     public static PokerConfig get() {
         if (instance == null) instance = load();

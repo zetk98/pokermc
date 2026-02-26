@@ -72,7 +72,7 @@ public class PokerNetworking {
 
     // ── State serialization ────────────────────────────────────────────────────
 
-    public static String serializeState(PokerGame game, String viewerName) {
+    public static String serializeState(PokerGame game, String viewerName, long worldTime) {
         JsonObject root = new JsonObject();
         root.addProperty("phase",           game.getPhase().name());
         root.addProperty("pot",             game.getPot());
@@ -129,9 +129,18 @@ public class PokerNetworking {
         }
         root.add("tradeItems", tradeArr);
 
-        // Notification duration (ms) for client
         root.addProperty("notifDurationMs",
                 PokerConfig.get().notificationDurationSeconds * 1000L);
+
+        int turnSec = PokerConfig.get().turnTimeSeconds;
+        if (turnSec > 0 && game.getPhase() != PokerGame.Phase.WAITING && game.getPhase() != PokerGame.Phase.SHOWDOWN
+                && game.getCurrentPlayerName().equals(viewerName)) {
+            long elapsed = Math.max(0, worldTime - game.getTurnStartTick());
+            int remaining = (int) Math.max(0, turnSec - elapsed / 20);
+            root.addProperty("turnTimeRemaining", remaining);
+        } else {
+            root.addProperty("turnTimeRemaining", 0);
+        }
 
         // Leaderboard
         List<PokerGame.PlayerState> sorted = new ArrayList<>(game.getPlayers());
@@ -148,8 +157,9 @@ public class PokerNetworking {
 
     /** Broadcast personalized state to every viewer. */
     public static void broadcastState(PokerTableBlockEntity be) {
+        long worldTime = be.getWorld() != null ? be.getWorld().getTime() : 0;
         for (ServerPlayerEntity sp : be.getViewers()) {
-            String json = serializeState(be.getGame(), sp.getName().getString());
+            String json = serializeState(be.getGame(), sp.getName().getString(), worldTime);
             net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
                     sp, new GameStatePayload(be.getPos(), json));
         }
@@ -190,6 +200,8 @@ public class PokerNetworking {
 
     // ── Handlers ─────────────────────────────────────────────────────────────
 
+    private static final int MIN_BALANCE_MULTIPLIER = 10;
+
     private static boolean handleCreate(PokerTableBlockEntity be, ServerPlayerEntity player, int betLevel) {
         if (!be.getGame().getPlayers().isEmpty()) return false;
         String name = player.getName().getString();
@@ -201,6 +213,18 @@ public class PokerNetworking {
 
     private static boolean handleJoin(PokerTableBlockEntity be, ServerPlayerEntity player) {
         String name = player.getName().getString();
+        if (be.getGame().hasPlayer(name)) {
+            be.addViewer(player);
+            return true;
+        }
+        int betLevel = be.getGame().getBetLevel();
+        int minRequired = betLevel * MIN_BALANCE_MULTIPLIER;
+        int balance = WalletStorage.get().getBalance(name);
+        if (balance < minRequired) {
+            be.getGame().setStatusMessage("Cần ít nhất " + minRequired + " ZC để vào phòng " + betLevel + ".");
+            broadcastState(be);
+            return false;
+        }
         int chips = resolveStartChips(name, be.getGame().getStartingChips());
         boolean changed = be.getGame().addPlayer(name, chips);
         if (changed) be.addViewer(player);

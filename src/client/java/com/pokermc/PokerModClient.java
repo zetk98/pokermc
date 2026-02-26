@@ -1,7 +1,9 @@
 package com.pokermc;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.pokermc.network.PokerNetworking;
-import com.pokermc.screen.CreateRoomScreen;
 import com.pokermc.screen.PokerLobbyScreen;
 import com.pokermc.screen.PokerTableScreen;
 import com.pokermc.screen.TradeScreen;
@@ -14,18 +16,40 @@ public class PokerModClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
 
-        // S2C: Server wants to open the poker table screen → show lobby first
         ClientPlayNetworking.registerGlobalReceiver(
                 PokerNetworking.OpenTablePayload.ID,
                 (payload, context) -> {
-                    System.out.println("[PokerMC Client] Received OpenTablePayload pos=" + payload.pos());
                     context.client().execute(() -> {
                         try {
-                            PokerLobbyScreen lobby = new PokerLobbyScreen(payload.pos(), payload.stateJson());
-                            context.client().setScreen(lobby);
-                            System.out.println("[PokerMC Client] Lobby screen opened.");
+                            String myName = context.client().player != null
+                                    ? context.client().player.getName().getString() : "";
+                            boolean inGame = false;
+                            try {
+                                JsonObject obj = JsonParser.parseString(payload.stateJson()).getAsJsonObject();
+                                if (obj.has("players")) {
+                                    for (JsonElement e : obj.getAsJsonArray("players")) {
+                                        if (e.getAsJsonObject().get("name").getAsString().equals(myName)) {
+                                            inGame = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!inGame && obj.has("pendingPlayers")) {
+                                    for (JsonElement e : obj.getAsJsonArray("pendingPlayers")) {
+                                        if (e.getAsString().equals(myName)) { inGame = true; break; }
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                            if (inGame) {
+                                PokerTableScreen ts = new PokerTableScreen(payload.pos(), payload.stateJson());
+                                context.client().setScreen(ts);
+                                ts.updateState(payload.stateJson());
+                            } else {
+                                PokerLobbyScreen lobby = new PokerLobbyScreen(payload.pos(), payload.stateJson());
+                                context.client().setScreen(lobby);
+                            }
                         } catch (Exception e) {
-                            System.err.println("[PokerMC Client] Error opening lobby: " + e.getMessage());
+                            System.err.println("[PokerMC Client] Error: " + e.getMessage());
                             e.printStackTrace();
                         }
                     });

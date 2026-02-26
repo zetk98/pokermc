@@ -61,19 +61,36 @@ public class PokerLobbyScreen extends Screen {
         int btnW = 110, btnH = 22;
         int btnX = bgX + (BG_W - btnW) / 2;
 
-        // ── Button 1: Create Room / Join Game ─────────────────────────────────
+        // ── Button 1: Create Room / Join Game / Vào bàn ───────────────────────
+        String myName = client.player != null ? client.player.getName().getString() : "";
+        boolean alreadyInGame = playerNames.contains(myName);
         if (isEmpty) {
             addDrawableChild(ButtonWidget.builder(Text.literal("✦ Create Room"),
                     b -> client.setScreen(new CreateRoomScreen(tablePos, stateJson)))
                     .dimensions(btnX, bgY + 80, btnW, btnH).build());
-        } else {
-            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Join Game"),
+        } else if (alreadyInGame) {
+            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Vào bàn"),
                     b -> {
                         PokerTableScreen ts = new PokerTableScreen(tablePos, stateJson);
                         client.setScreen(ts);
                         ts.updateState(stateJson);
                     })
                     .dimensions(btnX, bgY + 80, btnW, btnH).build());
+        } else {
+            int minRequired = betLevel * 10;
+            boolean canJoin = bankBalance >= minRequired;
+            var joinBtn = ButtonWidget.builder(Text.literal("▶ Join Game"),
+                    b -> {
+                        if (!canJoin) return;
+                        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                new com.pokermc.network.PokerNetworking.PlayerActionPayload(
+                                        tablePos, "JOIN", 0, ""));
+                        PokerTableScreen ts = new PokerTableScreen(tablePos, stateJson);
+                        client.setScreen(ts);
+                        ts.updateState(stateJson);
+                    })
+                    .dimensions(btnX, bgY + 80, btnW, btnH);
+            addDrawableChild(joinBtn.build()).active = canJoin;
         }
 
         // ── Button 2: Exchange ────────────────────────────────────────────────

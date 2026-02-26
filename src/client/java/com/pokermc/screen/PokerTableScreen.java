@@ -61,6 +61,13 @@ public class PokerTableScreen extends Screen {
     private String currentPlayerName = "", lastWinner = "", lastWinningHand = "";
     private String ownerName = "";
     private int bankBalance = 0;
+    private int turnTimeRemaining = 0;
+    private long turnTimeReceivedAt = 0;
+    private String prevPhase = "";
+    private final Set<Integer> revealedHeroCards = new java.util.HashSet<>();
+    private final List<int[]> heroCardBounds = new ArrayList<>();
+    private final Set<Integer> revealedCommunityIndices = new java.util.HashSet<>();
+    private final List<int[]> communityCardBounds = new ArrayList<>();
     private final List<String> communityCards  = new ArrayList<>();
     private final List<PlayerInfo> players     = new ArrayList<>();
     private final List<String> pendingPlayers  = new ArrayList<>();
@@ -200,6 +207,8 @@ public class PokerTableScreen extends Screen {
             ownerName          = obj.has("owner")       ? obj.get("owner").getAsString()    : "";
             betLevel           = obj.has("betLevel")    ? obj.get("betLevel").getAsInt()     : 10;
             bankBalance        = obj.has("bankBalance") ? obj.get("bankBalance").getAsInt()  : 0;
+            turnTimeRemaining  = obj.has("turnTimeRemaining") ? obj.get("turnTimeRemaining").getAsInt() : 0;
+            if (turnTimeRemaining > 0 && currentPlayerName.equals(myName)) turnTimeReceivedAt = System.currentTimeMillis();
             notifDurationMs    = obj.has("notifDurationMs") ? obj.get("notifDurationMs").getAsLong() : 5000;
 
             if (raiseAmount <= 0) raiseAmount = Math.max(1, betLevel);
@@ -211,6 +220,13 @@ public class PokerTableScreen extends Screen {
                 prevStatus = newStatus;
             }
 
+            boolean phaseChanged = !phase.equals(prevPhase);
+            if (phaseChanged) {
+                prevPhase = phase;
+                if (phase.equals("SHOWDOWN")) revealedCommunityIndices.clear();
+                else revealedHeroCards.clear();
+            }
+
             communityCards.clear();
             for (JsonElement e : obj.getAsJsonArray("community"))
                 communityCards.add(e.getAsString());
@@ -220,8 +236,9 @@ public class PokerTableScreen extends Screen {
                 JsonObject p = e.getAsJsonObject();
                 List<String> cards = new ArrayList<>();
                 for (JsonElement c : p.getAsJsonArray("holeCards")) cards.add(c.getAsString());
+                String pname = p.get("name").getAsString();
                 players.add(new PlayerInfo(
-                        p.get("name").getAsString(), p.get("chips").getAsInt(),
+                        pname, p.get("chips").getAsInt(),
                         p.get("currentBet").getAsInt(), p.get("folded").getAsBoolean(),
                         p.get("allIn").getAsBoolean(), cards));
             }
@@ -279,6 +296,11 @@ public class PokerTableScreen extends Screen {
         if (!currentPlayerName.isEmpty() && !phase.equals("WAITING") && !phase.equals("SHOWDOWN")) {
             boolean myTurn = currentPlayerName.equals(myName);
             String txt = myTurn ? "▶ YOUR TURN ◀" : currentPlayerName + "'s turn";
+            if (myTurn && turnTimeRemaining > 0) {
+                int elapsed = (int) ((System.currentTimeMillis() - turnTimeReceivedAt) / 1000);
+                int display = Math.max(0, turnTimeRemaining - elapsed);
+                txt += "  (" + display + "s)";
+            }
             int tw = textRenderer.getWidth(txt) + 12;
             int turnY = ty + tableH / 2 - 48;
             ctx.fill(cx - tw / 2, turnY - 2, cx + tw / 2, turnY + 10, 0xAA000000);
@@ -301,7 +323,7 @@ public class PokerTableScreen extends Screen {
 
         // ── Bank balance (top-left, below best hand) ──────────────────────────
         if (bankBalance > 0) {
-            ctx.drawTextWithShadow(textRenderer, "Bank: " + bankBalance + " ZC",
+            ctx.drawTextWithShadow(textRenderer, "Ví: " + bankBalance + " ZC",
                     tx + 4, ty + 4 + 12, C_GREEN);
         }
 
@@ -380,7 +402,7 @@ public class PokerTableScreen extends Screen {
         int hx = sx - headSz / 2, hy = sy - headSz / 2;
         drawPlayerHead(ctx, name, hx, hy, headSz);
 
-        if (isTurn) drawBorder(ctx, hx - 1, hy - 1, headSz + 2, headSz + 2, C_HIGHLIGHT, 1);
+        if (isTurn) drawBorder(ctx, hx - 1, hy - 1, headSz + 2, headSz + 2, C_RED_SLOT, 1);
 
         // Crown above head (owner)
         if (!isPending && name.equals(ownerName))
@@ -407,6 +429,30 @@ public class PokerTableScreen extends Screen {
         // Cards
         if (!isPending && !pi.holeCards.isEmpty()) {
             drawSeatCards(ctx, sx, sy, headSz, pi.holeCards, cardDir, isHero);
+            if (isHero) cacheHeroCardBounds(sx, sy, headSz, pi.holeCards.size(), cardDir);
+        }
+    }
+
+    private void cacheHeroCardBounds(int sx, int sy, int headSz, int num, int cardDir) {
+        heroCardBounds.clear();
+        int totalW = num * (CARD_W + 3) - 3;
+        int cx2, cy2;
+        if (cardDir == 2) {
+            cx2 = sx - totalW / 2;
+            cy2 = sy - headSz / 2 - 3 - CARD_H;
+        } else if (cardDir == 0) {
+            cx2 = sx - totalW / 2;
+            cy2 = sy + headSz / 2 + 28;
+        } else if (cardDir == +1) {
+            cx2 = sx + headSz / 2 + 3;
+            cy2 = sy - CARD_H / 2;
+        } else {
+            cx2 = sx - headSz / 2 - 3 - totalW;
+            cy2 = sy - CARD_H / 2;
+        }
+        for (int j = 0; j < num; j++) {
+            int bx = cx2 + j * (CARD_W + 3), by = cy2;
+            heroCardBounds.add(new int[]{bx - 1, by - 1, CARD_W + 2, CARD_H + 2});
         }
     }
 
@@ -414,26 +460,26 @@ public class PokerTableScreen extends Screen {
                                 List<String> holeCards, int cardDir, boolean isHero) {
         int num = holeCards.size();
         if (isHero) {
-            // Full-size cards for hero
             int totalW = num * (CARD_W + 3) - 3;
             int cx2, cy2;
-            if (cardDir == 2) { // UP: above head
+            if (cardDir == 2) {
                 cx2 = sx - totalW / 2;
                 cy2 = sy - headSz / 2 - 3 - CARD_H;
-            } else if (cardDir == 0) { // DOWN: below chips text
+            } else if (cardDir == 0) {
                 cx2 = sx - totalW / 2;
-                cy2 = sy + headSz / 2 + 28; // after name + chips lines
-            } else if (cardDir == +1) { // RIGHT
+                cy2 = sy + headSz / 2 + 28;
+            } else if (cardDir == +1) {
                 cx2 = sx + headSz / 2 + 3;
                 cy2 = sy - CARD_H / 2;
-            } else { // LEFT
+            } else {
                 cx2 = sx - headSz / 2 - 3 - totalW;
                 cy2 = sy - CARD_H / 2;
             }
             for (int j = 0; j < num; j++) {
                 int bx = cx2 + j * (CARD_W + 3), by = cy2;
-                drawBorder(ctx, bx - 1, by - 1, CARD_W + 2, CARD_H + 2, C_RED_SLOT, 1);
-                drawCard(ctx, bx, by, holeCards.get(j));
+                boolean revealed = revealedHeroCards.contains(j) || phase.equals("SHOWDOWN");
+                if (revealed) drawCard(ctx, bx, by, holeCards.get(j));
+                else drawCardBack(ctx, bx, by);
             }
         } else {
             // Small cards for opponents
@@ -453,7 +499,6 @@ public class PokerTableScreen extends Screen {
             }
             for (int j = 0; j < num; j++) {
                 int bx = cx2 + j * (SMALL_W + 1);
-                drawBorder(ctx, bx - 1, cy2 - 1, SMALL_W + 2, SMALL_H + 2, C_RED_SLOT, 1);
                 if (holeCards.get(j).equals("??")) drawCardBackSmall(ctx, bx, cy2);
                 else                               drawCardSmall(ctx, bx, cy2, holeCards.get(j));
             }
@@ -466,11 +511,17 @@ public class PokerTableScreen extends Screen {
         int slotY = ty + tableH / 2 - 18;
         int totalW = 5 * (CARD_W + 3) - 3;
         int startX = cx - totalW / 2;
+        communityCardBounds.clear();
         for (int i = 0; i < 5; i++) {
             int sx = startX + i * (CARD_W + 3);
-            drawBorder(ctx, sx - 1, slotY - 1, CARD_W + 2, CARD_H + 2, C_RED_SLOT, 1);
-            if (i < communityCards.size()) drawCard(ctx, sx, slotY, communityCards.get(i));
-            else                           drawCardBack(ctx, sx, slotY);
+            boolean revealed = revealedCommunityIndices.contains(i) || !phase.equals("SHOWDOWN");
+            if (i < communityCards.size()) {
+                if (revealed) drawCard(ctx, sx, slotY, communityCards.get(i));
+                else drawCardBack(ctx, sx, slotY);
+            } else {
+                drawCardBack(ctx, sx, slotY);
+            }
+            communityCardBounds.add(new int[]{sx - 1, slotY - 1, CARD_W + 2, CARD_H + 2});
         }
     }
 
@@ -585,6 +636,29 @@ public class PokerTableScreen extends Screen {
     private void sendAction(String action, int amount) {
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
                 new PokerNetworking.PlayerActionPayload(tablePos, action, amount, ""));
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            for (int j = 0; j < heroCardBounds.size(); j++) {
+                int[] b = heroCardBounds.get(j);
+                if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
+                    revealedHeroCards.add(j);
+                    return true;
+                }
+            }
+            if (phase.equals("SHOWDOWN")) {
+                for (int i = 0; i < communityCardBounds.size(); i++) {
+                    int[] b = communityCardBounds.get(i);
+                    if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
+                        revealedCommunityIndices.add(i);
+                        return true;
+                    }
+                }
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override

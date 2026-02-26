@@ -196,8 +196,7 @@ public class TradeScreen extends Screen {
         // Title
         ctx.drawCenteredTextWithShadow(textRenderer, "⇄ EXCHANGE", cx, y0 + 8, C_GOLD);
 
-        // Bank balance (top-right)
-        String bankStr = "Bank: " + bankBalance + " ZC";
+        String bankStr = "Ví: " + bankBalance + " ZC";
         ctx.drawTextWithShadow(textRenderer, bankStr, x0 + W - 8 - textRenderer.getWidth(bankStr), y0 + 8, C_GREEN);
 
         // Tab highlight
@@ -246,13 +245,13 @@ public class TradeScreen extends Screen {
                 int avail = availableInInventory(selectedIdx);
                 int actual = Math.min(amount, avail);
                 int gain = actual * ti.buyRate();
-                String preview = actual + " " + ti.shortName() + " → +" + gain + " ZC";
+                String preview = actual + " " + ti.displayName() + " → +" + gain + " ZC";
                 ctx.drawCenteredTextWithShadow(textRenderer, preview, cx + 40, ctrlY + 4,
                         avail > 0 ? C_GREEN : C_RED);
             } else {
                 int cost = amount * ti.sellRate();
                 boolean canAfford = cost <= bankBalance;
-                String preview = cost + " ZC → " + amount + " " + ti.shortName();
+                String preview = cost + " ZC → " + amount + " " + ti.displayName();
                 ctx.drawCenteredTextWithShadow(textRenderer, preview, cx + 40, ctrlY + 4,
                         canAfford ? C_GREEN : C_RED);
             }

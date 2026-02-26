@@ -42,6 +42,7 @@ public class PokerGame {
     private String lastWinner = "";
     private String lastWinningHand = "";
     private String statusMessage = "Waiting for players...";
+    private long turnStartTick = 0;
 
     // ── Per-table bet level (overrides global config) ─────────────────────────
     private int betLevel      = 10;
@@ -91,12 +92,16 @@ public class PokerGame {
         if (phase == Phase.WAITING || phase == Phase.SHOWDOWN) {
             return players.removeIf(p -> p.name.equals(name));
         }
-        // Mid-game: fold them out
-        players.stream().filter(p -> p.name.equals(name)).findFirst()
-                .ifPresent(p -> {
-                    p.folded = true;
-                    p.hasActed = true;
-                });
+        int idx = -1;
+        for (int i = 0; i < players.size(); i++) {
+            if (players.get(i).name.equals(name)) { idx = i; break; }
+        }
+        if (idx < 0) return false;
+        players.get(idx).folded = true;
+        players.get(idx).hasActed = true;
+        players.remove(idx);
+        if (idx <= currentPlayerIndex) currentPlayerIndex = Math.max(-1, currentPlayerIndex - 1);
+        if (currentPlayerIndex >= players.size()) currentPlayerIndex = -1;
         checkRoundEnd();
         return true;
     }
@@ -121,7 +126,7 @@ public class PokerGame {
         PlayerState p = players.stream().filter(ps -> ps.name.equals(name)).findFirst().orElse(null);
         if (p == null) return false;
         p.chips += amount;
-        statusMessage = name + " deposited " + amount + " chips.";
+        statusMessage = name + " deposited " + amount + " ZC.";
         return true;
     }
 
@@ -338,7 +343,7 @@ public class PokerGame {
                 winner.chips += pot;
                 lastWinner = winner.name;
                 lastWinningHand = "Last player standing";
-                statusMessage = winner.name + " wins " + pot + " chips! (everyone else folded)";
+                statusMessage = winner.name + " wins " + pot + " ZC! (everyone else folded)";
             }
         } else {
             // Showdown - evaluate hands
@@ -363,7 +368,7 @@ public class PokerGame {
                 winner.chips += pot;
                 lastWinner = winner.name;
                 lastWinningHand = bestHand != null ? bestHand.getDisplayName() : "";
-                statusMessage = winner.name + " wins " + pot + " chips with " + lastWinningHand + "!";
+                statusMessage = winner.name + " wins " + pot + " ZC with " + lastWinningHand + "!";
             }
         }
 
@@ -410,4 +415,6 @@ public class PokerGame {
     public PlayerState getPlayer(String name) {
         return players.stream().filter(p -> p.name.equals(name)).findFirst().orElse(null);
     }
+    public void setTurnStartTick(long tick) { this.turnStartTick = tick; }
+    public long getTurnStartTick() { return turnStartTick; }
 }
