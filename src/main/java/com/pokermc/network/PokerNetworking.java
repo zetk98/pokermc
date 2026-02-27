@@ -31,7 +31,7 @@ public class PokerNetworking {
 
     public record OpenTablePayload(BlockPos pos, String stateJson) implements CustomPayload {
         public static final CustomPayload.Id<OpenTablePayload> ID =
-                new CustomPayload.Id<>(Identifier.of("pokermc", "open_table"));
+                new CustomPayload.Id<>(Identifier.of("casinocraft", "open_table"));
         public static final PacketCodec<PacketByteBuf, OpenTablePayload> CODEC = PacketCodec.tuple(
                 BlockPos.PACKET_CODEC, OpenTablePayload::pos,
                 PacketCodecs.STRING, OpenTablePayload::stateJson,
@@ -41,7 +41,7 @@ public class PokerNetworking {
 
     public record GameStatePayload(BlockPos pos, String stateJson) implements CustomPayload {
         public static final CustomPayload.Id<GameStatePayload> ID =
-                new CustomPayload.Id<>(Identifier.of("pokermc", "game_state"));
+                new CustomPayload.Id<>(Identifier.of("casinocraft", "game_state"));
         public static final PacketCodec<PacketByteBuf, GameStatePayload> CODEC = PacketCodec.tuple(
                 BlockPos.PACKET_CODEC, GameStatePayload::pos,
                 PacketCodecs.STRING, GameStatePayload::stateJson,
@@ -60,7 +60,7 @@ public class PokerNetworking {
     public record PlayerActionPayload(BlockPos pos, String action, int amount, String data)
             implements CustomPayload {
         public static final CustomPayload.Id<PlayerActionPayload> ID =
-                new CustomPayload.Id<>(Identifier.of("pokermc", "player_action"));
+                new CustomPayload.Id<>(Identifier.of("casinocraft", "player_action"));
         public static final PacketCodec<PacketByteBuf, PlayerActionPayload> CODEC = PacketCodec.tuple(
                 BlockPos.PACKET_CODEC,  PlayerActionPayload::pos,
                 PacketCodecs.STRING,    PlayerActionPayload::action,

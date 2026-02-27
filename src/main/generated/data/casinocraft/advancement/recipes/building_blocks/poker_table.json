@@ -23,7 +23,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "pokermc:poker_table"
+        "recipe": "casinocraft:poker_table"
       },
       "trigger": "minecraft:recipe_unlocked"
     }
@@ -37,7 +37,7 @@
   ],
   "rewards": {
     "recipes": [
-      "pokermc:poker_table"
+      "casinocraft:poker_table"
     ]
   }
 }

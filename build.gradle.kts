@@ -13,7 +13,7 @@ base {
 loom {
     splitEnvironmentSourceSets()
     mods {
-        create("pokermc") {
+        create("casinocraft") {
             sourceSet("main")
             sourceSet("client")
         }

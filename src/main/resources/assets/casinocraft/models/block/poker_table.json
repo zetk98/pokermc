@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "casinocraft:block/poker_table_top",
+    "bottom": "casinocraft:block/poker_table_side",
+    "side": "casinocraft:block/poker_table_side"
+  }
+}

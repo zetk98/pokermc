@@ -27,9 +27,9 @@ import java.util.*;
 public class PokerTableScreen extends Screen {
 
     // ── Textures ─────────────────────────────────────────────────────────────
-    private static final Identifier TEX_BG        = Identifier.of("pokermc", "textures/gui/poker_table_bg.png");
-    private static final Identifier TEX_CARD_ATLAS = Identifier.of("pokermc", "textures/gui/card_atlas.png");
-    private static final Identifier TEX_CARD_BACK  = Identifier.of("pokermc", "textures/gui/card_back.png");
+    private static final Identifier TEX_BG        = Identifier.of("casinocraft", "textures/gui/poker_table_bg.png");
+    private static final Identifier TEX_CARD_ATLAS = Identifier.of("casinocraft", "textures/gui/card_atlas.png");
+    private static final Identifier TEX_CARD_BACK  = Identifier.of("casinocraft", "textures/gui/card_back.png");
     private static final int ATLAS_W = 286, ATLAS_H = 128;
     private static final int CARD_W  = 22,  CARD_H  = 32;
     private static final int SMALL_W = 14,  SMALL_H = 20;

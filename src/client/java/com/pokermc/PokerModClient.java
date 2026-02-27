@@ -50,7 +50,7 @@ public class PokerModClient implements ClientModInitializer {
                                 context.client().setScreen(lobby);
                             }
                         } catch (Exception e) {
-                            System.err.println("[PokerMC Client] Error: " + e.getMessage());
+                            System.err.println("[CasinoCraft Client] Error: " + e.getMessage());
                             e.printStackTrace();
                         }
                     });
@@ -69,6 +69,6 @@ public class PokerModClient implements ClientModInitializer {
                 })
         );
 
-        System.out.println("[PokerMC Client] Client initialized.");
+        System.out.println("[CasinoCraft Client] Client initialized.");
     }
 }

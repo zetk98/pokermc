@@ -35,7 +35,7 @@ public class ZCoinBagItem extends Item {
         ZCoinBagScreenHandler.loadFromBag(stack, inv);
         user.openHandledScreen(new SimpleNamedScreenHandlerFactory(
                 (syncId, pinv, p) -> new ZCoinBagScreenHandler(syncId, pinv, inv, slotIndex),
-                Text.translatable("item.pokermc.zcoin_bag")));
+                Text.translatable("item.casinocraft.zcoin_bag")));
         return TypedActionResult.success(stack);
     }
 

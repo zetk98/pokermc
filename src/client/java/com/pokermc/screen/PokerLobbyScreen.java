@@ -22,7 +22,7 @@ import java.util.List;
 public class PokerLobbyScreen extends Screen {
 
     private static final Identifier TEX_BG =
-            Identifier.of("pokermc", "textures/gui/lobby_bg.png");
+            Identifier.of("casinocraft", "textures/gui/lobby_bg.png");
     private static final int BG_W = 260, BG_H = 180;
 
     private static final int C_GOLD  = 0xFFFFD700;

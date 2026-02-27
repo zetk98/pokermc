@@ -7,7 +7,7 @@ import java.util.*;
 
 /**
  * Configures item ↔ ZC exchange rates.
- * Edit  config/pokermc_trades.json  to add/remove items or change rates.
+ * Edit  config/casinocraft_trades.json  to add/remove items or change rates.
  *
  * buyRates:  itemId → ZC you receive when depositing 1 of that item
  * sellRates: itemId → ZC cost per withdraw unit
@@ -16,7 +16,7 @@ import java.util.*;
 public class TradeConfig {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = Path.of("config", "pokermc_trades.json");
+    private static final Path CONFIG_PATH = Path.of("config", "casinocraft_trades.json");
     private static TradeConfig instance;
 
     /** item-id → ZC received per item deposited */
@@ -32,20 +32,20 @@ public class TradeConfig {
         buyRates.put("minecraft:gold_ingot",  2);   // 1 gold = 2 zc
         buyRates.put("minecraft:emerald",     5);   // 1 emerald = 5 zc
         buyRates.put("minecraft:diamond",     10);  // 1 diamond = 10 zc
-        buyRates.put("pokermc:zcoin",         1);   // 1 ZCoin item = 1 ZC
+        buyRates.put("casinocraft:zcoin",         1);   // 1 ZCoin item = 1 ZC
 
         // SELL: spend ZC → receive items (2zc=1 iron, 3zc=1 gold, 7zc=1 emerald, 13zc=1 diamond)
         sellRates.put("minecraft:iron_ingot", 2);   // 2 zc = 1 iron
         sellRates.put("minecraft:gold_ingot", 3);   // 3 zc = 1 gold
         sellRates.put("minecraft:emerald",    7);   // 7 zc = 1 emerald
         sellRates.put("minecraft:diamond",    13);  // 13 zc = 1 diamond
-        sellRates.put("pokermc:zcoin",        1);   // 1 zc = 1 ZCoin item
+        sellRates.put("casinocraft:zcoin",        1);   // 1 zc = 1 ZCoin item
 
         sellGives.put("minecraft:iron_ingot", 1);
         sellGives.put("minecraft:gold_ingot", 1);
         sellGives.put("minecraft:emerald",    1);
         sellGives.put("minecraft:diamond",    1);
-        sellGives.put("pokermc:zcoin",        1);
+        sellGives.put("casinocraft:zcoin",        1);
     }
 
     public static TradeConfig get() {
@@ -74,7 +74,7 @@ public class TradeConfig {
                 }
             }
         } catch (IOException e) {
-            System.err.println("[PokerMC] Failed to load trades config: " + e.getMessage());
+            System.err.println("[CasinoCraft] Failed to load trades config: " + e.getMessage());
         }
         TradeConfig def = new TradeConfig();
         def.save();
@@ -88,7 +88,7 @@ public class TradeConfig {
                 GSON.toJson(this, w);
             }
         } catch (IOException e) {
-            System.err.println("[PokerMC] Failed to save trades config: " + e.getMessage());
+            System.err.println("[CasinoCraft] Failed to save trades config: " + e.getMessage());
         }
     }
 }

@@ -24,7 +24,7 @@ import net.minecraft.util.Identifier;
 
 public class PokerMod implements ModInitializer {
 
-    public static final String MOD_ID = "pokermc";
+    public static final String MOD_ID = "casinocraft";
 
     // Block
     public static final PokerTableBlock POKER_TABLE_BLOCK = new PokerTableBlock(
@@ -85,12 +85,12 @@ public class PokerMod implements ModInitializer {
                 )
         );
 
-        // Create PokerMC creative tab
+        // Create CasinoCraft creative tab
         Registry.register(Registries.ITEM_GROUP,
                 Identifier.of(MOD_ID, "main"),
                 FabricItemGroup.builder()
                         .icon(() -> new ItemStack(POKER_TABLE_ITEM))
-                        .displayName(Text.translatable("itemGroup.pokermc"))
+                        .displayName(Text.translatable("itemGroup.casinocraft"))
                         .entries((context, entries) -> {
                             entries.add(POKER_TABLE_ITEM);
                             entries.add(ZCOIN_ITEM);
@@ -98,7 +98,7 @@ public class PokerMod implements ModInitializer {
                         })
                         .build());
 
-        System.out.println("[PokerMC] Initialized. Bet item: " + PokerConfig.get().betItemId
+        System.out.println("[CasinoCraft] Initialized. Bet item: " + PokerConfig.get().betItemId
                 + " | BE type: " + POKER_TABLE_BLOCK_ENTITY);
     }
 }

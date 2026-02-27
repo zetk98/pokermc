@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "id": "pokermc",
+  "id": "casinocraft",
   "version": "${version}",
-  "name": "PokerMC",
-  "description": "Play Texas Hold'em Poker in Minecraft multiplayer!",
-  "authors": ["PokerMC"],
+  "name": "CasinoCraft",
+  "description": "Casino mod for Minecraft - Poker, Blackjack (xì dách) and more games!",
+  "authors": ["CasinoCraft"],
   "contact": {},
   "license": "MIT",
-  "icon": "assets/pokermc/icon.png",
+  "icon": "assets/casinocraft/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": ["com.pokermc.PokerMod"],

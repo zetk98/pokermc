@@ -12,7 +12,7 @@ import java.nio.file.*;
 
 public class PokerConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = Path.of("config", "pokermc.json");
+    private static final Path CONFIG_PATH = Path.of("config", "casinocraft.json");
     private static PokerConfig instance;
 
     // Config fields
@@ -59,7 +59,7 @@ public class PokerConfig {
                 }
             }
         } catch (IOException e) {
-            System.err.println("[PokerMC] Failed to load config: " + e.getMessage());
+            System.err.println("[CasinoCraft] Failed to load config: " + e.getMessage());
         }
         PokerConfig def = new PokerConfig();
         def.save();
@@ -73,7 +73,7 @@ public class PokerConfig {
                 GSON.toJson(this, writer);
             }
         } catch (IOException e) {
-            System.err.println("[PokerMC] Failed to save config: " + e.getMessage());
+            System.err.println("[CasinoCraft] Failed to save config: " + e.getMessage());
         }
     }
 }
