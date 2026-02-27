@@ -36,11 +36,9 @@ public class PokerLobbyScreen extends Screen {
 
     // Parsed state
     private final List<String> playerNames = new ArrayList<>();
-    private final List<LeaderEntry> leaderboard = new ArrayList<>();
     private boolean isEmpty = true;
     private int bankBalance = 0;
     private int betLevel = 10;
-    private boolean showLeaderboard = false;
 
     public PokerLobbyScreen(BlockPos pos, String stateJson) {
         super(Text.literal("Poker Lobby"));
@@ -58,24 +56,24 @@ public class PokerLobbyScreen extends Screen {
                 b -> close())
                 .dimensions(bgX + BG_W - 20, bgY + 4, 16, 14).build());
 
-        int btnW = 110, btnH = 22;
+        int btnW = 120, btnH = 24;
         int btnX = bgX + (BG_W - btnW) / 2;
 
-        // ── Button 1: Create Room / Join Game / Vào bàn ───────────────────────
+        // ── Button 1: Create Room / Join Game / Enter Table ──────────────────
         String myName = client.player != null ? client.player.getName().getString() : "";
         boolean alreadyInGame = playerNames.contains(myName);
         if (isEmpty) {
             addDrawableChild(ButtonWidget.builder(Text.literal("✦ Create Room"),
                     b -> client.setScreen(new CreateRoomScreen(tablePos, stateJson)))
-                    .dimensions(btnX, bgY + 80, btnW, btnH).build());
+                    .dimensions(btnX, bgY + 75, btnW, btnH).build());
         } else if (alreadyInGame) {
-            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Vào bàn"),
+            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Enter Table"),
                     b -> {
                         PokerTableScreen ts = new PokerTableScreen(tablePos, stateJson);
                         client.setScreen(ts);
                         ts.updateState(stateJson);
                     })
-                    .dimensions(btnX, bgY + 80, btnW, btnH).build());
+                    .dimensions(btnX, bgY + 75, btnW, btnH).build());
         } else {
             int minRequired = betLevel * 10;
             boolean canJoin = bankBalance >= minRequired;
@@ -89,19 +87,14 @@ public class PokerLobbyScreen extends Screen {
                         client.setScreen(ts);
                         ts.updateState(stateJson);
                     })
-                    .dimensions(btnX, bgY + 80, btnW, btnH);
+                    .dimensions(btnX, bgY + 75, btnW, btnH);
             addDrawableChild(joinBtn.build()).active = canJoin;
         }
 
         // ── Button 2: Exchange ────────────────────────────────────────────────
         addDrawableChild(ButtonWidget.builder(Text.literal("⇄ Exchange"),
                 b -> client.setScreen(new TradeScreen(tablePos, stateJson)))
-                .dimensions(btnX, bgY + 107, btnW, btnH).build());
-
-        // ── Button 3: Top Players ─────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.literal("★ Top Players"),
-                b -> showLeaderboard = !showLeaderboard)
-                .dimensions(btnX, bgY + 134, btnW, btnH).build());
+                .dimensions(btnX, bgY + 105, btnW, btnH).build());
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -115,18 +108,13 @@ public class PokerLobbyScreen extends Screen {
             if (obj.has("players"))
                 for (JsonElement e : obj.getAsJsonArray("players"))
                     playerNames.add(e.getAsJsonObject().get("name").getAsString());
+            if (obj.has("pendingPlayers"))
+                for (JsonElement e : obj.getAsJsonArray("pendingPlayers"))
+                    playerNames.add(e.getAsString() + " (waiting)");
 
             isEmpty     = !obj.has("isEmpty") || obj.get("isEmpty").getAsBoolean();
             betLevel    = obj.has("betLevel")     ? obj.get("betLevel").getAsInt()     : 10;
             bankBalance = obj.has("bankBalance")  ? obj.get("bankBalance").getAsInt()  : 0;
-
-            leaderboard.clear();
-            if (obj.has("leaderboard"))
-                for (JsonElement e : obj.getAsJsonArray("leaderboard")) {
-                    JsonObject lo = e.getAsJsonObject();
-                    leaderboard.add(new LeaderEntry(
-                            lo.get("name").getAsString(), lo.get("chips").getAsInt()));
-                }
         } catch (Exception ignored) {}
     }
 
@@ -153,64 +141,38 @@ public class PokerLobbyScreen extends Screen {
 
         if (isEmpty) {
             ctx.drawCenteredTextWithShadow(textRenderer,
-                    "Empty — be the first to create a room", cx, bgY + 34, C_GRAY);
+                    "Empty — be the first to create a room", cx, bgY + 38, C_GRAY);
         } else {
             String bb = betLevel >= 1000 ? (betLevel/1000) + "K" : String.valueOf(betLevel);
             ctx.drawCenteredTextWithShadow(textRenderer,
                     "BB: " + bb + " ZC  ·  " + playerNames.size() + " seated",
-                    cx, bgY + 34, C_CYAN);
-            int lineY = bgY + 46;
-            for (int i = 0; i < Math.min(playerNames.size(), 4); i++)
-                ctx.drawCenteredTextWithShadow(textRenderer, "• " + playerNames.get(i),
-                        cx, lineY + i * 8, C_WHITE);
-            if (playerNames.size() > 4)
-                ctx.drawCenteredTextWithShadow(textRenderer,
-                        "+" + (playerNames.size() - 4) + " more", cx, lineY + 32, C_GRAY);
+                    cx - 30, bgY + 38, C_CYAN);
         }
 
-        // Bank balance
+        // Player list — right column, balanced
+        if (!isEmpty && !playerNames.isEmpty()) {
+            int colLeft = bgX + BG_W - 62;
+            int lineY = bgY + 52;
+            ctx.drawTextWithShadow(textRenderer, "Players:", colLeft, lineY - 12, C_GRAY);
+            for (int i = 0; i < Math.min(playerNames.size(), 6); i++) {
+                String name = playerNames.get(i);
+                if (textRenderer.getWidth(name) > 52) name = name.substring(0, 7) + "..";
+                ctx.drawTextWithShadow(textRenderer, "• " + name, colLeft, lineY + i * 10, C_WHITE);
+            }
+            if (playerNames.size() > 6)
+                ctx.drawTextWithShadow(textRenderer, "+" + (playerNames.size() - 6), colLeft, lineY + 60, C_GRAY);
+        }
+
+        // ZCoin
         ctx.drawCenteredTextWithShadow(textRenderer,
-                "Wallet: " + bankBalance + " ZC", cx, bgY + BG_H - 14, C_GREEN);
+                "ZCoin: " + bankBalance, cx, bgY + BG_H - 16, C_GREEN);
 
         super.render(ctx, mouseX, mouseY, delta);
-        if (showLeaderboard) renderLeaderboard(ctx, cx, cy);
-    }
-
-    private void renderLeaderboard(DrawContext ctx, int cx, int cy) {
-        int rows = Math.max(leaderboard.size(), 1);
-        int lw = 170, lh = 28 + rows * 12 + 6;
-        int lx = cx - lw / 2, ly = cy - lh / 2;
-
-        ctx.fill(lx, ly, lx + lw, ly + lh, 0xEE050510);
-        for (int i = 0; i < 2; i++) {
-            ctx.fill(lx+i, ly+i, lx+lw-i, ly+i+1, C_GOLD);
-            ctx.fill(lx+i, ly+lh-i-1, lx+lw-i, ly+lh-i, C_GOLD);
-            ctx.fill(lx+i, ly+i, lx+i+1, ly+lh-i, C_GOLD);
-            ctx.fill(lx+lw-i-1, ly+i, lx+lw-i, ly+lh-i, C_GOLD);
-        }
-        ctx.drawCenteredTextWithShadow(textRenderer, "★ Top Players ★", cx, ly + 8, C_GOLD);
-        ctx.fill(lx + 8, ly + 19, lx + lw - 8, ly + 20, 0xFF444400);
-
-        if (leaderboard.isEmpty()) {
-            ctx.drawCenteredTextWithShadow(textRenderer, "No data yet", cx, ly + 26, C_GRAY);
-        } else {
-            for (int i = 0; i < leaderboard.size(); i++) {
-                String line = (i+1) + ". " + leaderboard.get(i).name()
-                        + "  " + leaderboard.get(i).chips() + " ZC";
-                int col = i==0 ? C_GOLD : i==1 ? 0xFFCCCCCC : i==2 ? 0xFFCD7F32 : C_GRAY;
-                ctx.drawCenteredTextWithShadow(textRenderer, line, cx, ly + 24 + i * 12, col);
-            }
-        }
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) {
-            if (showLeaderboard) { showLeaderboard = false; return true; }
-            close(); return true;
-        }
+        if (keyCode == 256) { close(); return true; }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
-
-    public record LeaderEntry(String name, int chips) {}
 }

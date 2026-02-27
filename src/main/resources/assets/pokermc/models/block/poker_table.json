@@ -1,6 +1,8 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "minecraft:block/cube_bottom_top",
   "textures": {
-    "all": "pokermc:block/poker_table"
+    "top": "pokermc:block/poker_table_top",
+    "bottom": "pokermc:block/poker_table_side",
+    "side": "pokermc:block/poker_table_side"
   }
 }

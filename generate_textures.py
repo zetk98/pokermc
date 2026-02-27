@@ -8,7 +8,7 @@ Output files:
   src/main/resources/assets/pokermc/textures/gui/card_back.png    (22x32)   - card back
   src/main/resources/assets/pokermc/textures/gui/poker_table_bg.png (360x230) - game table GUI
   src/main/resources/assets/pokermc/textures/gui/lobby_bg.png     (260x180) - lobby/landing screen
-  src/main/resources/assets/pokermc/textures/block/poker_table.png (16x16)  - block texture
+  src/main/resources/assets/pokermc/textures/block/poker_table_top.png, poker_table_side.png - block
 """
 import struct, zlib, os, math
 
@@ -72,9 +72,13 @@ FONT_3x5 = {
     'J':['011','001','001','101','111'],
     'Q':['111','101','101','110','001'],
     'K':['101','110','100','110','101'],
-    'A':['010','101','111','101','101'],
     'Z':['111','001','010','100','111'],
     '!':['010','010','010','000','010'],
+    # POKER text
+    'P':['111','101','111','100','100'],
+    'O':['111','101','101','101','111'],
+    'E':['111','100','111','100','111'],
+    'R':['111','101','111','110','101'],
 }
 
 def draw_char(pixels, W, cx, cy, ch, color):
@@ -89,6 +93,13 @@ def draw_text(pixels, W, x, y, text, color):
     for ch in text:
         draw_char(pixels, W, cx, y, ch, color)
         cx += 4
+
+def draw_text_compact(pixels, W, x, y, text, color, spacing=3):
+    """Draw text with smaller spacing for block textures."""
+    cx = x
+    for ch in text:
+        draw_char(pixels, W, cx, y, ch, color)
+        cx += spacing
 
 # 5x5 suit symbols
 SUIT_PIXELS = {
@@ -348,29 +359,54 @@ def make_lobby_bg():
 # ---------------------------------------------------------------------------
 # Block texture  (16x16)
 # ---------------------------------------------------------------------------
+# ZCoin mini icon (5x5): round circle
+# ---------------------------------------------------------------------------
+ZCOIN_5x5 = [
+    '01110',
+    '10001',
+    '10001',
+    '10001',
+    '01110',
+]
+def draw_zcoin_mini(pixels, W, cx, cy, color):
+    """Draw small ZCoin circle at cx,cy."""
+    for row, line in enumerate(ZCOIN_5x5):
+        for col, bit in enumerate(line):
+            if bit == '1':
+                px(pixels, W, cx+col, cy+row, color)
+
+# ---------------------------------------------------------------------------
+# Poker table block: top = felt + POKER + ZCoin, side = wood
+# ---------------------------------------------------------------------------
 def make_block_texture():
     W = H = 16
-    pixels = new_canvas(W, H)
-
     WOOD   = (60, 35, 10, 255)
     WOOD_D = (40, 22, 5, 255)
-    CLOTH  = (12, 12, 16, 255)  # dark cloth
+    FELT   = (18, 80, 18, 255)   # green felt
+    FELT_D = (12, 55, 12, 255)  # darker felt edge
 
-    fill(pixels, W, 0, 0, W, H, WOOD)
-    border(pixels, W, 0, 0, W, H, WOOD_D, 1)
-    fill(pixels, W, 2, 2, W-2, H-2, CLOTH)
-    border(pixels, W, 2, 2, W-2, H-2, GOLD, 1)
+    # ---- Top: green felt with POKER text and ZCoin ----
+    top = new_canvas(W, H)
+    fill(top, W, 0, 0, W, H, FELT)
+    border(top, W, 0, 0, W, H, GOLD, 1)
+    fill(top, W, 1, 1, W-1, H-1, FELT)
+    # POKER text centered - bolder, clearer (y=4 for better visibility)
+    draw_text_compact(top, W, 0, 4, "POKER", GOLD_L, 3)
+    # ZCoin icons on table (2 coins)
+    draw_zcoin_mini(top, W, 2, 10, GOLD)
+    draw_zcoin_mini(top, W, 9, 10, GOLD)
+    # Z in center of each coin
+    draw_char(top, W, 3, 11, 'Z', (180, 140, 40, 255))
+    draw_char(top, W, 10, 11, 'Z', (180, 140, 40, 255))
+    write_png(f"{BASE}/block/poker_table_top.png", top, W, H)
 
-    # Oval outline
-    cx, cy = W//2, H//2
-    for a in range(0, 360, 8):
-        rad = math.radians(a)
-        ex = int(cx + math.cos(rad)*4)
-        ey = int(cy + math.sin(rad)*3)
-        if 2 <= ex < W-2 and 2 <= ey < H-2:
-            pixels[ey * W + ex] = GOLD
-
-    write_png(f"{BASE}/block/poker_table.png", pixels, W, H)
+    # ---- Side: dark polished frame (not wood) ----
+    FRAME   = (45, 45, 50, 255)   # dark charcoal
+    FRAME_D = (30, 30, 35, 255)  # darker edge
+    side = new_canvas(W, H)
+    fill(side, W, 0, 0, W, H, FRAME)
+    border(side, W, 0, 0, W, H, FRAME_D, 1)
+    write_png(f"{BASE}/block/poker_table_side.png", side, W, H)
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -385,4 +421,5 @@ if __name__ == "__main__":
     print(f"  {BASE}/gui/card_back.png    - card back design")
     print(f"  {BASE}/gui/poker_table_bg.png - game table background")
     print(f"  {BASE}/gui/lobby_bg.png     - lobby/landing screen background")
-    print(f"  {BASE}/block/poker_table.png  - block texture (16x16)")
+    print(f"  {BASE}/block/poker_table_top.png  - block top (felt + POKER + ZCoin)")
+    print(f"  {BASE}/block/poker_table_side.png - block side (wood)")

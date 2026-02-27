@@ -52,7 +52,7 @@ public class PokerTableBlockEntity extends BlockEntity {
             viewers.add(player);
             String name = player.getName().getString();
             long worldTime = getWorld() != null ? getWorld().getTime() : 0;
-            String json = PokerNetworking.serializeState(game, name, worldTime);
+            String json = PokerNetworking.serializeState(game, player, worldTime);
             net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
                     player, new PokerNetworking.OpenTablePayload(pos, json));
             System.out.println("[PokerMC] Sent OpenTablePayload to " + player.getName().getString()
@@ -139,13 +139,16 @@ public class PokerTableBlockEntity extends BlockEntity {
 
         // Force fold + remove players who left / disconnected
         if (!toForce.isEmpty()) {
+            var server = sw.getServer();
             for (String name : toForce) {
                 if (name.equals(game.getCurrentPlayerName()))
                     game.performAction(name, PokerGame.Action.FOLD, 0);
                 game.getPlayers().stream().filter(p -> p.name.equals(name)).findFirst()
                         .ifPresent(ps -> {
-                            if (ps.chips > 0)
-                                com.pokermc.config.WalletStorage.get().addBalance(name, ps.chips);
+                            if (ps.chips > 0) {
+                                var sp = server.getPlayerManager().getPlayer(name);
+                                if (sp != null) com.pokermc.config.ZCoinStorage.giveBack(sp, ps.chips);
+                            }
                         });
                 game.removePlayer(name);
                 be.viewers.removeIf(p -> p.getName().getString().equals(name));

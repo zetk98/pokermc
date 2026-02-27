@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "G": {
+      "item": "minecraft:green_wool"
+    },
+    "W": {
+      "item": "minecraft:oak_planks"
+    }
+  },
+  "pattern": [
+    "GGG",
+    "G G",
+    "W W"
+  ],
+  "result": {
+    "count": 1,
+    "id": "pokermc:poker_table"
+  }
+}

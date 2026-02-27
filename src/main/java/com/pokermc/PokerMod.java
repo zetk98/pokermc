@@ -2,10 +2,13 @@ package com.pokermc;
 
 import com.pokermc.block.PokerTableBlock;
 import com.pokermc.blockentity.PokerTableBlockEntity;
+import com.pokermc.component.PokerComponents;
 import com.pokermc.config.PokerConfig;
+import com.pokermc.item.ZCoinBagItem;
+import com.pokermc.item.ZCoinItem;
 import com.pokermc.network.PokerNetworking;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.AbstractBlock;
@@ -13,8 +16,9 @@ import net.minecraft.block.MapColor;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemGroups;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
+import net.minecraft.text.Text;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
 
@@ -30,6 +34,10 @@ public class PokerMod implements ModInitializer {
                     .nonOpaque()
     );
 
+    // Items
+    public static final ZCoinItem ZCOIN_ITEM = new ZCoinItem(new Item.Settings().maxCount(64));
+    public static final ZCoinBagItem ZCOIN_BAG_ITEM = new ZCoinBagItem(new Item.Settings().maxCount(1));
+
     // Block item
     public static final BlockItem POKER_TABLE_ITEM = new BlockItem(
             POKER_TABLE_BLOCK,
@@ -42,10 +50,12 @@ public class PokerMod implements ModInitializer {
     @Override
     public void onInitialize() {
         PokerConfig.get();
-
+        PokerComponents.ZCOIN_BAG_BALANCE.toString(); // ensure component is registered
         // Register block & item
         Registry.register(Registries.BLOCK, Identifier.of(MOD_ID, "poker_table"), POKER_TABLE_BLOCK);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "poker_table"), POKER_TABLE_ITEM);
+        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin"), ZCOIN_ITEM);
+        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin_bag"), ZCOIN_BAG_ITEM);
 
         // Register block entity type using vanilla builder (no deprecated Fabric wrapper)
         POKER_TABLE_BLOCK_ENTITY = Registry.register(
@@ -75,9 +85,18 @@ public class PokerMod implements ModInitializer {
                 )
         );
 
-        // Add poker table to the Functional Blocks creative tab
-        ItemGroupEvents.modifyEntriesEvent(ItemGroups.FUNCTIONAL).register(entries ->
-                entries.add(POKER_TABLE_ITEM));
+        // Create PokerMC creative tab
+        Registry.register(Registries.ITEM_GROUP,
+                Identifier.of(MOD_ID, "main"),
+                FabricItemGroup.builder()
+                        .icon(() -> new ItemStack(POKER_TABLE_ITEM))
+                        .displayName(Text.translatable("itemGroup.pokermc"))
+                        .entries((context, entries) -> {
+                            entries.add(POKER_TABLE_ITEM);
+                            entries.add(ZCOIN_ITEM);
+                            entries.add(ZCOIN_BAG_ITEM);
+                        })
+                        .build());
 
         System.out.println("[PokerMC] Initialized. Bet item: " + PokerConfig.get().betItemId
                 + " | BE type: " + POKER_TABLE_BLOCK_ENTITY);

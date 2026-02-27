@@ -11,7 +11,8 @@
   "environment": "*",
   "entrypoints": {
     "main": ["com.pokermc.PokerMod"],
-    "client": ["com.pokermc.PokerModClient"]
+    "client": ["com.pokermc.PokerModClient"],
+    "fabric-datagen": ["com.pokermc.datagen.PokerModDataGenerator"]
   },
   "mixins": [],
   "depends": {

@@ -8,6 +8,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -59,6 +60,7 @@ public class PokerTableScreen extends Screen {
     private String phase = "WAITING";
     private int pot = 0, currentBet = 0, betLevel = 10;
     private String currentPlayerName = "", lastWinner = "", lastWinningHand = "";
+    private int lastPotWon = 0;
     private String ownerName = "";
     private int bankBalance = 0;
     private int turnTimeRemaining = 0;
@@ -77,11 +79,13 @@ public class PokerTableScreen extends Screen {
     private record Notification(String message, long expiresAt) {}
     private final LinkedList<Notification> notifications = new LinkedList<>();
     private String prevStatus = "";
-    private long notifDurationMs = 5000;
+    private static final long NOTIF_DURATION_MS = 3000;
 
     // ── Buttons ───────────────────────────────────────────────────────────────
     private ButtonWidget btnLeave, btnStart, btnReset;
     private ButtonWidget btnFold, btnCheck, btnCall, btnAllIn, btnRaise;
+    private ButtonWidget btnMinus, btnPlus;
+    private TextFieldWidget raiseInput;
     private int raiseAmount = 0;
 
     // ── Cached geometry ───────────────────────────────────────────────────────
@@ -139,18 +143,24 @@ public class PokerTableScreen extends Screen {
                 .dimensions(cx + 12, btnY, 44, btnH).build());
 
         btnRaise = addDrawableChild(ButtonWidget.builder(Text.literal("Raise"),
-                b -> sendAction("RAISE", raiseAmount))
+                b -> {
+                    int amt = parseRaiseAmount();
+                    if (amt > 0) sendAction("RAISE", amt);
+                })
                 .dimensions(cx + 61, btnY, 40, btnH).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("−"),
-                b -> { raiseAmount = Math.max(1, raiseAmount - betLevel);
-                    btnRaise.setMessage(Text.literal("+" + raiseAmount)); })
-                .dimensions(cx + 104, btnY, 12, btnH).build());
+        raiseInput = addDrawableChild(new TextFieldWidget(textRenderer, cx + 104, btnY, 42, btnH,
+                Text.literal("")));
+        raiseInput.setMaxLength(8);
+        raiseInput.setTextPredicate(s -> s.isEmpty() || s.matches("\\d+"));
+        raiseInput.setPlaceholder(Text.literal("+" + betLevel));
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("+"),
-                b -> { raiseAmount += betLevel;
-                    btnRaise.setMessage(Text.literal("+" + raiseAmount)); })
-                .dimensions(cx + 118, btnY, 12, btnH).build());
+        btnMinus = addDrawableChild(ButtonWidget.builder(Text.literal("−"),
+                b -> { raiseAmount = Math.max(1, raiseAmount - betLevel); syncRaiseInput(); })
+                .dimensions(cx + 149, btnY, 12, btnH).build());
+        btnPlus = addDrawableChild(ButtonWidget.builder(Text.literal("+"),
+                b -> { raiseAmount += betLevel; syncRaiseInput(); })
+                .dimensions(cx + 163, btnY, 12, btnH).build());
 
         updateButtonVisibility();
     }
@@ -167,11 +177,16 @@ public class PokerTableScreen extends Screen {
 
         btnLeave.visible  = amActive || amPending;
         btnStart.visible  = waiting && isOwner && players.size() >= 2;
-        btnReset.visible  = showdown && amActive;
+        btnReset.visible  = showdown && isOwner && amActive;
+
+        boolean showRaiseControls = isMyTurn;
 
         btnFold.visible   = isMyTurn;
         btnAllIn.visible  = isMyTurn;
-        btnRaise.visible  = isMyTurn;
+        btnRaise.visible  = showRaiseControls;
+        if (raiseInput != null) raiseInput.visible = showRaiseControls;
+        if (btnMinus != null) btnMinus.visible = showRaiseControls;
+        if (btnPlus != null) btnPlus.visible = showRaiseControls;
 
         PlayerInfo me = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
         int toCall = me != null ? Math.max(0, currentBet - me.currentBet) : 0;
@@ -188,9 +203,18 @@ public class PokerTableScreen extends Screen {
             btnRaise.active = me.chips > 0;
         }
 
-        if (btnRaise.visible) {
-            btnRaise.setMessage(Text.literal("+" + raiseAmount));
-        }
+        if (btnRaise.visible) syncRaiseInput();
+    }
+
+    private int parseRaiseAmount() {
+        if (raiseInput == null) return raiseAmount;
+        String s = raiseInput.getText().trim();
+        if (s.isEmpty()) return raiseAmount;
+        try { return Math.max(betLevel, Integer.parseInt(s)); } catch (NumberFormatException e) { return raiseAmount; }
+    }
+
+    private void syncRaiseInput() {
+        if (raiseInput != null) raiseInput.setText(String.valueOf(raiseAmount));
     }
 
     // ── State update ─────────────────────────────────────────────────────────
@@ -204,27 +228,34 @@ public class PokerTableScreen extends Screen {
             currentPlayerName  = obj.get("currentPlayer").getAsString();
             lastWinner         = obj.get("lastWinner").getAsString();
             lastWinningHand    = obj.get("lastWinningHand").getAsString();
+            lastPotWon         = obj.has("lastPotWon") ? obj.get("lastPotWon").getAsInt() : 0;
             ownerName          = obj.has("owner")       ? obj.get("owner").getAsString()    : "";
             betLevel           = obj.has("betLevel")    ? obj.get("betLevel").getAsInt()     : 10;
             bankBalance        = obj.has("bankBalance") ? obj.get("bankBalance").getAsInt()  : 0;
             turnTimeRemaining  = obj.has("turnTimeRemaining") ? obj.get("turnTimeRemaining").getAsInt() : 0;
             if (turnTimeRemaining > 0 && currentPlayerName.equals(myName)) turnTimeReceivedAt = System.currentTimeMillis();
-            notifDurationMs    = obj.has("notifDurationMs") ? obj.get("notifDurationMs").getAsLong() : 5000;
 
             if (raiseAmount <= 0) raiseAmount = Math.max(1, betLevel);
+            if (raiseInput != null) raiseInput.setPlaceholder(Text.literal("+" + betLevel));
 
             String newStatus = obj.get("status").getAsString();
             if (!newStatus.equals(prevStatus) && !newStatus.isEmpty()) {
                 notifications.addFirst(new Notification(newStatus,
-                        System.currentTimeMillis() + notifDurationMs));
+                        System.currentTimeMillis() + NOTIF_DURATION_MS));
                 prevStatus = newStatus;
             }
 
             boolean phaseChanged = !phase.equals(prevPhase);
             if (phaseChanged) {
+                if (phase.equals("SHOWDOWN")) {
+                    int numAlreadyShown = switch (prevPhase) {
+                        case "FLOP" -> 3; case "TURN" -> 4; case "RIVER" -> 5;
+                        default -> 0;
+                    };
+                    for (int i = 0; i < numAlreadyShown; i++) revealedCommunityIndices.add(i);
+                }
                 prevPhase = phase;
-                if (phase.equals("SHOWDOWN")) revealedCommunityIndices.clear();
-                else revealedHeroCards.clear();
+                if (phase.equals("WAITING") || phase.equals("PRE_FLOP")) revealedHeroCards.clear();
             }
 
             communityCards.clear();
@@ -289,6 +320,16 @@ public class PokerTableScreen extends Screen {
         // ── Community cards (center of felt) ──────────────────────────────────
         drawCommunityCards(ctx, cx, ty);
 
+        // ── Showdown winner banner (above 5 cards) ─────────────────────────────
+        if (phase.equals("SHOWDOWN") && !lastWinner.isEmpty()) {
+            int bw = 240, bh = 28;
+            int bannerY = ty + tableH / 2 - 55;
+            ctx.fill(cx - bw/2, bannerY, cx + bw/2, bannerY + bh, 0xDD000000);
+            drawBorder(ctx, cx - bw/2, bannerY, bw, bh, C_GOLD, 2);
+            String winText = lastWinner + " wins " + lastPotWon + " ZC!  " + lastWinningHand;
+            ctx.drawCenteredTextWithShadow(textRenderer, winText, cx, bannerY + 8, C_GOLD);
+        }
+
         // ── 8 seats on oval ───────────────────────────────────────────────────
         renderAllSeats(ctx, tx, ty);
 
@@ -308,27 +349,17 @@ public class PokerTableScreen extends Screen {
                     myTurn ? C_HIGHLIGHT : C_WHITE);
         }
 
-        // ── Showdown winner banner ────────────────────────────────────────────
-        if (phase.equals("SHOWDOWN") && !lastWinner.isEmpty()) {
-            int bw = 240, bh = 28;
-            ctx.fill(cx - bw/2, ty + tableH/2 - bh/2, cx + bw/2, ty + tableH/2 + bh/2, 0xDD000000);
-            drawBorder(ctx, cx - bw/2, ty + tableH/2 - bh/2, bw, bh, C_GOLD, 2);
-            ctx.drawCenteredTextWithShadow(textRenderer,
-                    lastWinner + " wins!  " + lastWinningHand,
-                    cx, ty + tableH/2 - 5, C_GOLD);
-        }
-
-        // ── Best hand (top-left) ──────────────────────────────────────────────
+        // ── Best hand (top-left) ─────────────────────────────────────────────
         renderBestHand(ctx, tx, ty);
 
-        // ── Bank balance (top-left, below best hand) ──────────────────────────
+        // ── ZCoin (top-left, below best hand) ────────────────────────────────────
         if (bankBalance > 0) {
-            ctx.drawTextWithShadow(textRenderer, "Ví: " + bankBalance + " ZC",
-                    tx + 4, ty + 4 + 12, C_GREEN);
+            ctx.drawTextWithShadow(textRenderer, "ZCoin: " + bankBalance,
+                    tx + 4, ty + 22, C_GREEN);
         }
 
-        // ── Timed notifications (bottom of table) ─────────────────────────────
-        renderNotifications(ctx, cx, ty);
+        // ── Notifications (below Leave, 3s) ───────────────────────────────────
+        renderNotifications(ctx, tx, ty);
 
         super.render(ctx, mouseX, mouseY, delta);
     }
@@ -533,35 +564,38 @@ public class PokerTableScreen extends Screen {
         try {
             List<Card> all = new ArrayList<>();
             for (String code : me.holeCards)   if (!code.equals("??")) all.add(Card.fromCode(code));
-            for (String code : communityCards) all.add(Card.fromCode(code));
+            for (String code : communityCards) if (!code.equals("??")) all.add(Card.fromCode(code));
             if (all.size() < 5) return;
             String handName = HandEvaluator.evaluate(all).getDisplayName();
-            String txt = "♥ " + handName;
-            int tw = textRenderer.getWidth(txt) + 6;
-            ctx.fill(tx + 2, ty + 2, tx + 2 + tw, ty + 13, 0xBB000000);
-            ctx.drawTextWithShadow(textRenderer, txt, tx + 5, ty + 4, C_GOLD);
+            String txt = handName;
+            int tw = Math.min(textRenderer.getWidth(txt) + 8, tableW - 80);
+            int bx = tx + 4, by = ty + 4;
+            ctx.fill(bx, by, bx + tw, by + 14, 0xDD000000);
+            drawBorder(ctx, bx, by, tw, 14, C_GOLD, 1);
+            ctx.drawTextWithShadow(textRenderer, txt, bx + 4, by + 3, C_GOLD);
         } catch (Exception ignored) {}
     }
 
-    // ── Notifications ─────────────────────────────────────────────────────────
+    // ── Notifications (below Leave, 3s) ────────────────────────────────────────
 
-    private void renderNotifications(DrawContext ctx, int cx, int ty) {
+    private void renderNotifications(DrawContext ctx, int tx, int ty) {
         long now = System.currentTimeMillis();
         notifications.removeIf(n -> n.expiresAt() < now);
+        int notifX = tx + tableW - 54;
+        int notifY = ty + 18;
         int maxShow = 3;
         int i = 0;
         for (Notification n : notifications) {
             if (i >= maxShow) break;
-            String msg = n.message().length() > 48 ? n.message().substring(0, 45) + "..." : n.message();
+            String msg = n.message().length() > 36 ? n.message().substring(0, 33) + "..." : n.message();
             int mw = textRenderer.getWidth(msg) + 8;
-            int my = ty + tableH - 22 - i * 12;
-            // Fade effect based on time remaining
+            int my = notifY + i * 12;
             long remaining = n.expiresAt() - now;
-            int alpha = remaining < 1000 ? (int)(0xAA * remaining / 1000) : 0xAA;
-            ctx.fill(cx - mw / 2, my - 1, cx + mw / 2, my + 9, (alpha << 24) | 0x000000);
-            int textAlpha = remaining < 1000 ? (int)(0xFF * remaining / 1000) : 0xFF;
+            int alpha = remaining < 500 ? (int)(0xAA * remaining / 500) : 0xAA;
+            ctx.fill(notifX - mw + 52, my - 1, notifX + 52, my + 9, (alpha << 24) | 0x000000);
+            int textAlpha = remaining < 500 ? (int)(0xFF * remaining / 500) : 0xFF;
             int color = (textAlpha << 24) | 0xCCCCCC;
-            ctx.drawCenteredTextWithShadow(textRenderer, msg, cx, my, color);
+            ctx.drawTextWithShadow(textRenderer, msg, notifX - mw + 56, my, color);
             i++;
         }
     }

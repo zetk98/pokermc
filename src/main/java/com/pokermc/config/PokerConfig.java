@@ -28,6 +28,8 @@ public class PokerConfig {
     public int    notificationDurationSeconds = 5;
     /** Seconds per turn; 0 = no limit. */
     public int    turnTimeSeconds = 30;
+    /** Max ZCoin capacity per ZCoin Bag (0 = unlimited, default 99999). */
+    public int    zcoinBagMaxCapacity = 99999;
 
     public static PokerConfig get() {
         if (instance == null) instance = load();

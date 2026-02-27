@@ -4,7 +4,7 @@ import com.google.gson.*;
 import com.pokermc.blockentity.PokerTableBlockEntity;
 import com.pokermc.config.PokerConfig;
 import com.pokermc.config.TradeConfig;
-import com.pokermc.config.WalletStorage;
+import com.pokermc.config.ZCoinStorage;
 import com.pokermc.game.Card;
 import com.pokermc.game.PokerGame;
 import net.minecraft.block.entity.BlockEntity;
@@ -72,7 +72,8 @@ public class PokerNetworking {
 
     // ── State serialization ────────────────────────────────────────────────────
 
-    public static String serializeState(PokerGame game, String viewerName, long worldTime) {
+    public static String serializeState(PokerGame game, ServerPlayerEntity viewer, long worldTime) {
+        String viewerName = viewer.getName().getString();
         JsonObject root = new JsonObject();
         root.addProperty("phase",           game.getPhase().name());
         root.addProperty("pot",             game.getPot());
@@ -80,6 +81,7 @@ public class PokerNetworking {
         root.addProperty("currentPlayer",   game.getCurrentPlayerName());
         root.addProperty("lastWinner",      game.getLastWinner());
         root.addProperty("lastWinningHand", game.getLastWinningHand());
+        root.addProperty("lastPotWon",      game.getLastPotWon());
         root.addProperty("status",          game.getStatusMessage());
         root.addProperty("betLevel",        game.getBetLevel());
         root.addProperty("isEmpty",         game.getPlayers().isEmpty()
@@ -114,8 +116,8 @@ public class PokerNetworking {
         for (String n : game.getPendingPlayers()) pendingArr.add(n);
         root.add("pendingPlayers", pendingArr);
 
-        // Per-viewer bank balance (persistent wallet)
-        root.addProperty("bankBalance", WalletStorage.get().getBalance(viewerName));
+        // Per-viewer ZCoin balance (from inventory)
+        root.addProperty("bankBalance", ZCoinStorage.getBalance(viewer));
 
         // Trade items list (from config, rates only — client checks inventory)
         TradeConfig trades = TradeConfig.get();
@@ -125,12 +127,10 @@ public class PokerNetworking {
             to.addProperty("id",       e.getKey());
             to.addProperty("buyRate",  e.getValue());
             to.addProperty("sellRate", trades.sellRates.getOrDefault(e.getKey(), e.getValue()));
+            to.addProperty("sellGives", trades.sellGives.getOrDefault(e.getKey(), e.getValue()));
             tradeArr.add(to);
         }
         root.add("tradeItems", tradeArr);
-
-        root.addProperty("notifDurationMs",
-                PokerConfig.get().notificationDurationSeconds * 1000L);
 
         int turnSec = PokerConfig.get().turnTimeSeconds;
         if (turnSec > 0 && game.getPhase() != PokerGame.Phase.WAITING && game.getPhase() != PokerGame.Phase.SHOWDOWN
@@ -142,16 +142,6 @@ public class PokerNetworking {
             root.addProperty("turnTimeRemaining", 0);
         }
 
-        // Leaderboard
-        List<PokerGame.PlayerState> sorted = new ArrayList<>(game.getPlayers());
-        sorted.sort((a, b) -> b.chips - a.chips);
-        JsonArray lb = new JsonArray();
-        for (PokerGame.PlayerState p : sorted) {
-            JsonObject lo = new JsonObject(); lo.addProperty("name", p.name); lo.addProperty("chips", p.chips);
-            lb.add(lo);
-        }
-        root.add("leaderboard", lb);
-
         return GSON.toJson(root);
     }
 
@@ -159,7 +149,7 @@ public class PokerNetworking {
     public static void broadcastState(PokerTableBlockEntity be) {
         long worldTime = be.getWorld() != null ? be.getWorld().getTime() : 0;
         for (ServerPlayerEntity sp : be.getViewers()) {
-            String json = serializeState(be.getGame(), sp.getName().getString(), worldTime);
+            String json = serializeState(be.getGame(), sp, worldTime);
             net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
                     sp, new GameStatePayload(be.getPos(), json));
         }
@@ -206,7 +196,7 @@ public class PokerNetworking {
         if (!be.getGame().getPlayers().isEmpty()) return false;
         String name = player.getName().getString();
         be.getGame().setBetLevel(betLevel);
-        int startChips = resolveStartChips(name, be.getGame().getStartingChips());
+        int startChips = resolveStartChips(player, be.getGame().getStartingChips());
         be.addViewer(player);
         return be.getGame().addPlayer(name, startChips);
     }
@@ -219,36 +209,31 @@ public class PokerNetworking {
         }
         int betLevel = be.getGame().getBetLevel();
         int minRequired = betLevel * MIN_BALANCE_MULTIPLIER;
-        int balance = WalletStorage.get().getBalance(name);
+        int balance = ZCoinStorage.getBalance(player);
         if (balance < minRequired) {
-            be.getGame().setStatusMessage("Cần ít nhất " + minRequired + " ZC để vào phòng " + betLevel + ".");
+            be.getGame().setStatusMessage("Need at least " + minRequired + " ZC to join (BB " + betLevel + ").");
             broadcastState(be);
             return false;
         }
-        int chips = resolveStartChips(name, be.getGame().getStartingChips());
+        int chips = resolveStartChips(player, be.getGame().getStartingChips());
         boolean changed = be.getGame().addPlayer(name, chips);
         if (changed) be.addViewer(player);
         return changed;
     }
 
-    /** Returns wallet chips for the player, falling back to table starting chips. */
-    private static int resolveStartChips(String name, int tableDefault) {
-        int bank = WalletStorage.get().getBalance(name);
-        if (bank > 0) {
-            WalletStorage.get().setBalance(name, 0);
-            return bank;
-        }
-        return tableDefault;
+    /** Take ZCoin from inventory for table; 0 = use table default. */
+    private static int resolveStartChips(ServerPlayerEntity player, int tableDefault) {
+        int taken = ZCoinStorage.takeAll(player);
+        return taken > 0 ? taken : tableDefault;
     }
 
     private static boolean handleLeave(PokerTableBlockEntity be, ServerPlayerEntity player) {
         String name = player.getName().getString();
-        // Return remaining table chips to the player's bank
         be.getGame().getPlayers().stream()
                 .filter(p -> p.name.equals(name))
                 .findFirst()
                 .ifPresent(ps -> {
-                    if (ps.chips > 0) WalletStorage.get().addBalance(name, ps.chips);
+                    if (ps.chips > 0) ZCoinStorage.giveBack(player, ps.chips);
                 });
         be.removeViewer(player);
         return be.getGame().removePlayer(name);
@@ -259,14 +244,17 @@ public class PokerNetworking {
     }
 
     private static boolean handleReset(PokerTableBlockEntity be, ServerPlayerEntity player) {
-        // Save all remaining chips to bank before reset
+        String owner = be.getGame().getPlayers().isEmpty() ? "" : be.getGame().getPlayers().get(0).name;
+        if (!player.getName().getString().equals(owner)) return false;
+        var server = be.getWorld() != null ? be.getWorld().getServer() : null;
         for (PokerGame.PlayerState ps : be.getGame().getPlayers()) {
             if (ps.chips > 0) {
-                WalletStorage.get().addBalance(ps.name, ps.chips);
-                ps.chips = 0;
+                var sp = server.getPlayerManager().getPlayer(ps.name);
+                if (sp != null) ZCoinStorage.giveBack(sp, ps.chips);
             }
         }
-        be.getGame().resetToWaiting();
+        be.getGame().resetToWaiting(server);
+        be.getGame().startGame();
         return true;
     }
 
@@ -292,28 +280,29 @@ public class PokerNetworking {
         removeItems(player, targetItem, toUse);
 
         int gained = toUse * rate;
-        String name = player.getName().getString();
-        WalletStorage.get().addBalance(name, gained);
-        be.getGame().setStatusMessage(name + " deposited +" + gained + " ZC.");
+        ZCoinStorage.add(player, gained);
+        be.getGame().setStatusMessage(player.getName().getString() + " deposited +" + gained + " ZC.");
         return true;
     }
 
-    /** Sell ZC for items: amount = item count, data = itemId */
+    /** Sell ZC for items: amount = number of withdraw units, data = itemId. cost per unit = sellRate, items per unit = sellGives */
     private static boolean handleWithdraw(PokerTableBlockEntity be, ServerPlayerEntity player, int amount, String itemId) {
         if (itemId == null || itemId.isEmpty()) return false;
         TradeConfig trades = TradeConfig.get();
         int rate = trades.sellRates.getOrDefault(itemId, 0);
+        int gives = trades.sellGives.getOrDefault(itemId, rate);
         if (rate <= 0) return false;
 
         Identifier itemIdParsed = Identifier.tryParse(itemId);
         if (itemIdParsed == null || !Registries.ITEM.containsId(itemIdParsed)) return false;
         Item targetItem = Registries.ITEM.get(itemIdParsed);
 
-        int toGive = Math.max(1, amount);
-        int totalCost = toGive * rate;
+        int units = Math.max(1, amount);
+        int totalCost = units * rate;
+        int toGive = units * gives;
         String name = player.getName().getString();
 
-        if (!WalletStorage.get().deductBalance(name, totalCost)) return false;
+        if (!ZCoinStorage.deduct(player, totalCost)) return false;
 
         // Give items to player
         int remaining = toGive;
@@ -335,6 +324,8 @@ public class PokerNetworking {
         int count = 0;
         for (ItemStack stack : player.getInventory().main)
             if (stack.getItem() == item) count += stack.getCount();
+        ItemStack offhand = player.getOffHandStack();
+        if (offhand.getItem() == item) count += offhand.getCount();
         return count;
     }
 
@@ -345,6 +336,13 @@ public class PokerNetworking {
                 int take = Math.min(stack.getCount(), remaining);
                 stack.decrement(take);
                 remaining -= take;
+            }
+        }
+        if (remaining > 0) {
+            ItemStack offhand = player.getOffHandStack();
+            if (offhand.getItem() == item) {
+                int take = Math.min(offhand.getCount(), remaining);
+                offhand.decrement(take);
             }
         }
     }

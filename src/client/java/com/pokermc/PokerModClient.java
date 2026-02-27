@@ -15,6 +15,7 @@ public class PokerModClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // ZCoin Bag dùng vanilla Generic3x3ContainerScreen (GENERIC_3X3) - không cần register
 
         ClientPlayNetworking.registerGlobalReceiver(
                 PokerNetworking.OpenTablePayload.ID,

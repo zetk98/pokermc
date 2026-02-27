@@ -44,6 +44,10 @@ dependencies {
     modImplementation("net.fabricmc.fabric-api:fabric-api:${project.property("fabric_version")}")
 }
 
+fabricApi {
+    configureDataGeneration()
+}
+
 tasks.processResources {
     inputs.property("version", project.version)
     filteringCharset = "UTF-8"

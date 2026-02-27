@@ -94,10 +94,10 @@ public class CreateRoomScreen extends Screen {
 
         ctx.drawCenteredTextWithShadow(textRenderer, "♠ CREATE ROOM ♠", cx, y0 + 16, C_GOLD);
         ctx.drawCenteredTextWithShadow(textRenderer,
-                "Mức cược (BB) · Ví: " + bankBalance + " ZC", cx, y0 + 34, C_WHITE);
+                "Bet level (BB) · ZCoin: " + bankBalance, cx, y0 + 34, C_WHITE);
         ctx.fill(x0 + 20, y0 + 44, x0 + W - 20, y0 + 45, 0xFF444400);
         ctx.drawCenteredTextWithShadow(textRenderer,
-                "Vào phòng cần min BB×10 ZC", cx, y0 + 52, C_GRAY);
+                "Min BB×10 ZC to enter", cx, y0 + 52, C_GRAY);
 
         int btnW = 48, gap = 6;
         int totalW = BET_LEVELS.length * (btnW + gap) - gap;

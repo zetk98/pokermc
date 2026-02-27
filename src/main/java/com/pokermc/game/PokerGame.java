@@ -39,8 +39,11 @@ public class PokerGame {
     private int currentBet = 0;
     private int dealerIndex = 0;
     private int currentPlayerIndex = -1;
+    private int lastRaiserIndex = -1;
+    private int firstCheckerIndex = -1;
     private String lastWinner = "";
     private String lastWinningHand = "";
+    private int lastPotWon = 0;
     private String statusMessage = "Waiting for players...";
     private long turnStartTick = 0;
 
@@ -143,6 +146,7 @@ public class PokerGame {
         currentBet = 0;
         lastWinner = "";
         lastWinningHand = "";
+        lastPotWon = 0;
 
         for (PlayerState p : players) {
             p.holeCards.clear();
@@ -201,6 +205,7 @@ public class PokerGame {
             }
             case CHECK -> {
                 if (currentBet > cur.currentBet) return false;
+                if (firstCheckerIndex < 0) firstCheckerIndex = players.indexOf(cur);
                 cur.hasActed = true;
                 statusMessage = playerName + " checked.";
             }
@@ -222,6 +227,8 @@ public class PokerGame {
                 cur.currentBet += total;
                 pot += total;
                 currentBet = cur.currentBet;
+                lastRaiserIndex = players.indexOf(cur);
+                firstCheckerIndex = -1;
                 if (cur.chips == 0) cur.allIn = true;
                 cur.hasActed = true;
                 for (PlayerState p : players)
@@ -237,6 +244,8 @@ public class PokerGame {
                 pot += allInAmt;
                 if (cur.currentBet > currentBet) {
                     currentBet = cur.currentBet;
+                    lastRaiserIndex = players.indexOf(cur);
+                    firstCheckerIndex = -1;
                     for (PlayerState p : players)
                         if (!p.folded && !p.allIn && !p.name.equals(playerName))
                             p.hasActed = false;
@@ -262,8 +271,8 @@ public class PokerGame {
         List<PlayerState> canAct = new ArrayList<>();
         for (PlayerState p : active) if (!p.allIn) canAct.add(p);
 
-        // If nobody can act (all remaining are all-in), run out the board
-        if (canAct.isEmpty()) { nextPhase(); return; }
+        // If nobody can act (all remaining are all-in), deal all 5 and showdown
+        if (canAct.isEmpty()) { dealAllAndShowdown(); return; }
 
         // Betting round done: every actionable player has acted AND matched the current bet
         boolean roundDone = true;
@@ -290,16 +299,27 @@ public class PokerGame {
         nextPhase();
     }
 
+    private void dealAllAndShowdown() {
+        while (communityCards.size() < 5) communityCards.add(deck.deal());
+        endHand();
+    }
+
     private void nextPhase() {
         for (PlayerState p : players) { p.currentBet = 0; p.hasActed = false; }
         currentBet = 0;
 
-        // First non-folded, non-all-in player after dealer
-        currentPlayerIndex = dealerIndex;
+        // First to act: last raiser if any, else first checker, else first after dealer
+        int firstIdx = lastRaiserIndex >= 0 ? lastRaiserIndex
+                : firstCheckerIndex >= 0 ? firstCheckerIndex
+                : dealerIndex;
+        lastRaiserIndex = -1;
+        firstCheckerIndex = -1;
+
+        currentPlayerIndex = firstIdx;
         int sz = players.size();
         boolean found = false;
-        for (int i = 1; i <= sz; i++) {
-            int next = (dealerIndex + i) % sz;
+        for (int i = 0; i < sz; i++) {
+            int next = (firstIdx + i) % sz;
             if (!players.get(next).folded && !players.get(next).allIn) {
                 currentPlayerIndex = next;
                 found = true;
@@ -335,11 +355,14 @@ public class PokerGame {
     }
 
     private void endHand() {
+        while (communityCards.size() < 5) communityCards.add(deck.deal());
+
         long activePlayers = players.stream().filter(p -> !p.folded).count();
 
         if (activePlayers == 1) {
             PlayerState winner = players.stream().filter(p -> !p.folded).findFirst().orElse(null);
             if (winner != null) {
+                lastPotWon = pot;
                 winner.chips += pot;
                 lastWinner = winner.name;
                 lastWinningHand = "Last player standing";
@@ -365,6 +388,7 @@ public class PokerGame {
             }
 
             if (winner != null) {
+                lastPotWon = pot;
                 winner.chips += pot;
                 lastWinner = winner.name;
                 lastWinningHand = bestHand != null ? bestHand.getDisplayName() : "";
@@ -378,16 +402,33 @@ public class PokerGame {
         dealerIndex = (dealerIndex + 1) % players.size();
     }
 
-    public void resetToWaiting() {
+    public void resetToWaiting(net.minecraft.server.MinecraftServer server) {
         if (phase != Phase.SHOWDOWN) return;
-        players.removeIf(p -> p.chips <= 0);
         PokerConfig cfg = PokerConfig.get();
+        for (PlayerState p : players) {
+            int chips = resolveStartChipsForReset(p.name, server);
+            p.chips = chips;
+            p.holeCards.clear();
+            p.currentBet = 0;
+            p.folded = false;
+            p.allIn = false;
+            p.hasActed = false;
+        }
         for (String name : pendingPlayers)
             if (players.size() < cfg.maxPlayers)
-                players.add(new PlayerState(name, startingChips));
+                players.add(new PlayerState(name, resolveStartChipsForReset(name, server)));
         pendingPlayers.clear();
         phase = Phase.WAITING;
         statusMessage = "Ready for next game.";
+    }
+
+    /** Take ZCoin from inventory for new game; 0 = use table default. */
+    private int resolveStartChipsForReset(String name, net.minecraft.server.MinecraftServer server) {
+        if (server == null) return startingChips;
+        var sp = server.getPlayerManager().getPlayer(name);
+        if (sp == null) return startingChips;
+        int taken = com.pokermc.config.ZCoinStorage.takeAll(sp);
+        return taken > 0 ? taken : startingChips;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -410,6 +451,7 @@ public class PokerGame {
     }
     public String getLastWinner() { return lastWinner; }
     public String getLastWinningHand() { return lastWinningHand; }
+    public int getLastPotWon() { return lastPotWon; }
     public String getStatusMessage() { return statusMessage; }
     public void setStatusMessage(String msg) { this.statusMessage = msg; }
     public PlayerState getPlayer(String name) {

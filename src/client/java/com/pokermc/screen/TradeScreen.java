@@ -39,12 +39,13 @@ public class TradeScreen extends Screen {
     private static final int C_SEL    = 0xFF1A1A2E; // selected row bg
 
     // ── Trade item data from server ───────────────────────────────────────────
-    private record TradeItem(String id, int buyRate, int sellRate) {
+    private record TradeItem(String id, int buyRate, int sellRate, int sellGives) {
         String shortName() { return id.contains(":") ? id.split(":")[1] : id; }
         String displayName() {
             String s = shortName().replace("_ingot", "").replace("_", " ");
             return s.substring(0, 1).toUpperCase() + s.substring(1);
         }
+        int itemsPerUnit() { return sellGives > 0 ? sellGives : sellRate; }
     }
 
     private final BlockPos tablePos;
@@ -68,18 +69,20 @@ public class TradeScreen extends Screen {
             if (obj.has("tradeItems")) {
                 for (JsonElement e : obj.getAsJsonArray("tradeItems")) {
                     JsonObject to = e.getAsJsonObject();
+                    int sellRate = to.has("sellRate") ? to.get("sellRate").getAsInt() : 10;
                     items.add(new TradeItem(
                             to.get("id").getAsString(),
                             to.has("buyRate")  ? to.get("buyRate").getAsInt()  : 10,
-                            to.has("sellRate") ? to.get("sellRate").getAsInt() : 10));
+                            sellRate,
+                            to.has("sellGives") ? to.get("sellGives").getAsInt() : sellRate));
                 }
             }
             // Default items if server didn't send any
             if (items.isEmpty()) {
-                items.add(new TradeItem("minecraft:iron_ingot",  5,  5));
-                items.add(new TradeItem("minecraft:gold_ingot",  20, 20));
-                items.add(new TradeItem("minecraft:emerald",     50, 50));
-                items.add(new TradeItem("minecraft:diamond",     100, 100));
+                items.add(new TradeItem("minecraft:iron_ingot",  1,  1,  2));
+                items.add(new TradeItem("minecraft:gold_ingot",  2,  2,  4));
+                items.add(new TradeItem("minecraft:emerald",    5,  5,  8));
+                items.add(new TradeItem("minecraft:diamond",    10, 10, 13));
             }
             if (selectedIdx >= items.size()) selectedIdx = 0;
         } catch (Exception ignored) {}
@@ -94,14 +97,14 @@ public class TradeScreen extends Screen {
         int cx = width / 2, cy = height / 2;
         int x0 = cx - W / 2, y0 = cy - H / 2;
 
-        // ── BUY / SELL tabs ───────────────────────────────────────────────────
+        // ── BUY / SELL tabs (shifted right) ───────────────────────────────────
         addDrawableChild(ButtonWidget.builder(Text.literal("BUY"),
                 b -> { buyMode = true;  clearChildren(); init(); })
-                .dimensions(x0 + 10, y0 + 28, 50, 16).build());
+                .dimensions(x0 + 24, y0 + 28, 50, 16).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("SELL"),
                 b -> { buyMode = false; clearChildren(); init(); })
-                .dimensions(x0 + 64, y0 + 28, 50, 16).build());
+                .dimensions(x0 + 78, y0 + 28, 50, 16).build());
 
         // ── Item list rows (click to select) ──────────────────────────────────
         int rowY = y0 + 52;
@@ -112,16 +115,16 @@ public class TradeScreen extends Screen {
                     .dimensions(x0 + 8, rowY + i * 22, W - 16, 20).build());
         }
 
-        // ── Amount controls ───────────────────────────────────────────────────
+        // ── Amount controls (shifted right) ────────────────────────────────────
         int ctrlY = y0 + 52 + items.size() * 22 + 10;
 
         addDrawableChild(ButtonWidget.builder(Text.literal("−"),
                 b -> { if (amount > 1) amount--; })
-                .dimensions(cx - 38, ctrlY, 20, 16).build());
+                .dimensions(cx - 20, ctrlY, 20, 16).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("+"),
                 b -> amount++)
-                .dimensions(cx - 14, ctrlY, 20, 16).build());
+                .dimensions(cx + 4, ctrlY, 20, 16).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Max"),
                 b -> {
@@ -130,14 +133,14 @@ public class TradeScreen extends Screen {
                     } else {
                         if (!items.isEmpty()) {
                             int rate = items.get(selectedIdx).sellRate();
-                            amount = rate > 0 ? bankBalance / rate : 0;
+                            amount = rate > 0 ? bankBalance / rate : 0;  // max units
                         }
                     }
                     amount = Math.max(1, amount);
                 })
-                .dimensions(cx + 10, ctrlY, 36, 16).build());
+                .dimensions(cx + 28, ctrlY, 36, 16).build());
 
-        // ── Accept ────────────────────────────────────────────────────────────
+        // ── Accept (shifted right) ────────────────────────────────────────────
         int footY = y0 + H - 28;
         addDrawableChild(ButtonWidget.builder(Text.literal("✔ Confirm"),
                 b -> {
@@ -159,11 +162,11 @@ public class TradeScreen extends Screen {
                     }
                     close();
                 })
-                .dimensions(cx - 70, footY, 64, 18).build());
+                .dimensions(cx - 52, footY, 64, 18).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("✕ Back"),
                 b -> close())
-                .dimensions(cx + 6, footY, 64, 18).build());
+                .dimensions(cx + 18, footY, 64, 18).build());
     }
 
     private int availableInInventory(int idx) {
@@ -196,11 +199,11 @@ public class TradeScreen extends Screen {
         // Title
         ctx.drawCenteredTextWithShadow(textRenderer, "⇄ EXCHANGE", cx, y0 + 8, C_GOLD);
 
-        String bankStr = "Ví: " + bankBalance + " ZC";
+        String bankStr = "ZCoin: " + bankBalance;
         ctx.drawTextWithShadow(textRenderer, bankStr, x0 + W - 8 - textRenderer.getWidth(bankStr), y0 + 8, C_GREEN);
 
         // Tab highlight
-        ctx.fill(x0 + (buyMode ? 10 : 64), y0 + 44, x0 + (buyMode ? 60 : 114), y0 + 46, C_GOLD);
+        ctx.fill(x0 + (buyMode ? 24 : 78), y0 + 44, x0 + (buyMode ? 74 : 128), y0 + 46, C_GOLD);
 
         // ── Item rows ─────────────────────────────────────────────────────────
         int rowY = y0 + 52;
@@ -225,34 +228,39 @@ public class TradeScreen extends Screen {
                 ctx.drawTextWithShadow(textRenderer, rate,
                         x0 + W - 14 - textRenderer.getWidth(rate), ry + 6, C_GOLD);
             } else {
-                String rate = ti.sellRate() + " ZC = 1";
+                int gives = ti.itemsPerUnit();
+                String rate = ti.sellRate() + " ZC = " + gives;
                 ctx.drawTextWithShadow(textRenderer, rate, x0 + 100, ry + 6, C_GOLD);
-                int canBuy = ti.sellRate() > 0 ? bankBalance / ti.sellRate() : 0;
-                String canStr = "Max: " + canBuy;
+                int maxUnits = ti.sellRate() > 0 ? bankBalance / ti.sellRate() : 0;
+                String canStr = "Max: " + maxUnits;
                 ctx.drawTextWithShadow(textRenderer, canStr,
                         x0 + W - 14 - textRenderer.getWidth(canStr), ry + 6,
-                        canBuy > 0 ? C_CYAN : C_GRAY);
+                        maxUnits > 0 ? C_CYAN : C_GRAY);
             }
         }
 
-        // ── Amount + preview ──────────────────────────────────────────────────
+        // ── Amount controls ────────────────────────────────────────────────────
         int ctrlY = rowY + items.size() * 22 + 10;
-        ctx.drawCenteredTextWithShadow(textRenderer, "Qty: " + amount, cx - 60, ctrlY + 4, C_WHITE);
+        ctx.drawCenteredTextWithShadow(textRenderer, "Qty: " + amount, cx - 70, ctrlY + 4, C_WHITE);
 
+        // Preview — bottom-left corner (no overlap)
         if (!items.isEmpty()) {
             TradeItem ti = items.get(selectedIdx);
+            int previewY = y0 + H - 12;
+            int previewX = x0 + 10;
             if (buyMode) {
                 int avail = availableInInventory(selectedIdx);
                 int actual = Math.min(amount, avail);
                 int gain = actual * ti.buyRate();
                 String preview = actual + " " + ti.displayName() + " → +" + gain + " ZC";
-                ctx.drawCenteredTextWithShadow(textRenderer, preview, cx + 40, ctrlY + 4,
+                ctx.drawTextWithShadow(textRenderer, preview, previewX, previewY,
                         avail > 0 ? C_GREEN : C_RED);
             } else {
                 int cost = amount * ti.sellRate();
+                int itemsOut = amount * ti.itemsPerUnit();
                 boolean canAfford = cost <= bankBalance;
-                String preview = cost + " ZC → " + amount + " " + ti.displayName();
-                ctx.drawCenteredTextWithShadow(textRenderer, preview, cx + 40, ctrlY + 4,
+                String preview = cost + " ZC → " + itemsOut + " " + ti.displayName();
+                ctx.drawTextWithShadow(textRenderer, preview, previewX, previewY,
                         canAfford ? C_GREEN : C_RED);
             }
         }
