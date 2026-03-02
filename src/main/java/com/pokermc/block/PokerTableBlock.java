@@ -58,6 +58,17 @@ public class PokerTableBlock extends BlockWithEntity {
      * Called after onUseWithItem returns PASS_TO_DEFAULT_BLOCK_INTERACTION.
      */
     @Override
+    @SuppressWarnings("deprecation")
+    public void onStateReplaced(BlockState state, World world, BlockPos pos, BlockState newState, boolean moved) {
+        super.onStateReplaced(state, world, pos, newState, moved);
+        if (world.isClient || state.isOf(newState.getBlock()) || moved) return;
+        BlockEntity be = world.getBlockEntity(pos);
+        if (be instanceof PokerTableBlockEntity table) {
+            table.refundAllPlayers();
+        }
+    }
+
+    @Override
     protected ActionResult onUse(BlockState state, World world, BlockPos pos, PlayerEntity player,
                                  BlockHitResult hit) {
         if (world.isClient) {

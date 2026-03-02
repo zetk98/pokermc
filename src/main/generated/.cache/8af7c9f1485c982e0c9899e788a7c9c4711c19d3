@@ -1,5 +1,7 @@
-// 1.21.1	2026-02-27T16:58:16.219557	CasinoCraft/Recipes
+// 1.21.1	2026-02-27T18:12:05.0524601	CasinoCraft/Recipes
 b0fac848fc6a2d8c487e5ee3def654dfbf39c6e3 data\casinocraft\recipe\poker_table.json
+fbfd60cfc77ebc0e082a365a3e794edfa4464a12 data\casinocraft\recipe\blackjack_table.json
+acc7abd5654680e403872cdc0927c17f5a90e9f0 data\casinocraft\advancement\recipes\building_blocks\blackjack_table.json
 d90b756be478cccd44d4e86ec5957fa1569fbb79 data\casinocraft\advancement\recipes\misc\zcoin_bag.json
 36cbee05e80baa440467bfe90f66e1cdf288e507 data\casinocraft\advancement\recipes\building_blocks\poker_table.json
 968fd9d6bbff419f78bd202ca3f647133d7a4022 data\casinocraft\recipe\zcoin_bag.json

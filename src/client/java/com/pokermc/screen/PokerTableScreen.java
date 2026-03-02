@@ -57,6 +57,7 @@ public class PokerTableScreen extends Screen {
 
     // ── State ─────────────────────────────────────────────────────────────────
     private final BlockPos tablePos;
+    private int framesOpen = 0;
     private String phase = "WAITING";
     private int pot = 0, currentBet = 0, betLevel = 10;
     private String currentPlayerName = "", lastWinner = "", lastWinningHand = "";
@@ -198,9 +199,10 @@ public class PokerTableScreen extends Screen {
         btnCall.active  = toCall > 0;
         btnCall.setMessage(Text.literal(toCall > 0 ? "Call " + toCall : "Call"));
 
+        boolean hasAllInPlayer = players.stream().anyMatch(p -> p.allIn);
         if (me != null) {
-            btnAllIn.active = !me.allIn && me.chips > 0;
-            btnRaise.active = me.chips > 0;
+            btnAllIn.active = !me.allIn && me.chips > 0 && !hasAllInPlayer;
+            btnRaise.active = me.chips > 0 && !hasAllInPlayer;
         }
 
         if (btnRaise.visible) syncRaiseInput();
@@ -293,6 +295,7 @@ public class PokerTableScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        if (framesOpen < 10) framesOpen++;
         int cx = width / 2, cy = height / 2;
         tableW = Math.min(width - 20, 360);
         tableH = Math.min(height - 20, 230);
@@ -674,6 +677,7 @@ public class PokerTableScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (framesOpen < 5) return true;
         if (button == 0) {
             for (int j = 0; j < heroCardBounds.size(); j++) {
                 int[] b = heroCardBounds.get(j);

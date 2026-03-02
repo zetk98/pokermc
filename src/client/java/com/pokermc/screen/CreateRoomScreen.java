@@ -29,6 +29,7 @@ public class CreateRoomScreen extends Screen {
     private final BlockPos tablePos;
     private final String stateJson;
     private int bankBalance = 0;
+    private int framesOpen = 0;
 
     public CreateRoomScreen(BlockPos tablePos, String stateJson) {
         super(Text.literal("Create Room"));
@@ -79,7 +80,7 @@ public class CreateRoomScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // Solid dark background (NOT transparent)
+        if (framesOpen < 10) framesOpen++;
         ctx.fill(0, 0, width, height, 0xFF000000);
 
         int cx = width / 2, cy = height / 2;
@@ -123,6 +124,12 @@ public class CreateRoomScreen extends Screen {
 
     @Override public void renderBackground(DrawContext ctx, int mx, int my, float d) {}
     @Override public boolean shouldPause() { return false; }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (framesOpen < 5) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {

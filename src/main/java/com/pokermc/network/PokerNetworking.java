@@ -86,6 +86,7 @@ public class PokerNetworking {
         root.addProperty("betLevel",        game.getBetLevel());
         root.addProperty("isEmpty",         game.getPlayers().isEmpty()
                                          && game.getPendingPlayers().isEmpty());
+        root.addProperty("minZcToJoin",     PokerConfig.get().minZcToJoin);
 
         // Community cards
         JsonArray community = new JsonArray();
@@ -119,15 +120,17 @@ public class PokerNetworking {
         // Per-viewer ZCoin balance (from inventory)
         root.addProperty("bankBalance", ZCoinStorage.getBalance(viewer));
 
-        // Trade items list (from config, rates only — client checks inventory)
-        TradeConfig trades = TradeConfig.get();
+        // Trade items: only iron, gold, emerald, diamond
+        var trades = TradeConfig.get();
         JsonArray tradeArr = new JsonArray();
-        for (Map.Entry<String, Integer> e : trades.buyRates.entrySet()) {
+        String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
+        for (String id : allowed) {
+            if (!trades.buyRates.containsKey(id)) continue;
             JsonObject to = new JsonObject();
-            to.addProperty("id",       e.getKey());
-            to.addProperty("buyRate",  e.getValue());
-            to.addProperty("sellRate", trades.sellRates.getOrDefault(e.getKey(), e.getValue()));
-            to.addProperty("sellGives", trades.sellGives.getOrDefault(e.getKey(), e.getValue()));
+            to.addProperty("id", id);
+            to.addProperty("buyRate", trades.buyRates.get(id));
+            to.addProperty("sellRate", trades.sellRates.getOrDefault(id, trades.buyRates.get(id)));
+            to.addProperty("sellGives", trades.sellGives.getOrDefault(id, 1));
             tradeArr.add(to);
         }
         root.add("tradeItems", tradeArr);
@@ -167,7 +170,7 @@ public class PokerNetworking {
         String data   = payload.data() != null ? payload.data() : "";
 
         boolean changed = switch (action) {
-            case "CREATE"   -> handleCreate(be, player, amount);
+            case "CREATE"   -> handleCreate(be, player);
             case "JOIN"     -> handleJoin(be, player);
             case "LEAVE"    -> handleLeave(be, player);
             case "START"    -> handleStart(be, player);
@@ -190,15 +193,25 @@ public class PokerNetworking {
 
     // ── Handlers ─────────────────────────────────────────────────────────────
 
-    private static final int MIN_BALANCE_MULTIPLIER = 10;
-
-    private static boolean handleCreate(PokerTableBlockEntity be, ServerPlayerEntity player, int betLevel) {
+    /** First person creates room and enters as host. Uses config blinds. */
+    private static boolean handleCreate(PokerTableBlockEntity be, ServerPlayerEntity player) {
         if (!be.getGame().getPlayers().isEmpty()) return false;
+        int minReq = PokerConfig.get().minZcToJoin;
+        int balance = ZCoinStorage.getBalance(player);
+        if (balance < minReq) {
+            be.getGame().setStatusMessage("Need at least " + minReq + " ZC to create room.");
+            broadcastState(be);
+            return false;
+        }
         String name = player.getName().getString();
-        be.getGame().setBetLevel(betLevel);
-        int startChips = resolveStartChips(player, be.getGame().getStartingChips());
+        int chips = resolveStartChips(player);
+        if (chips <= 0) {
+            be.getGame().setStatusMessage("Need ZCoin to create room. Use Exchange to deposit items.");
+            broadcastState(be);
+            return false;
+        }
         be.addViewer(player);
-        return be.getGame().addPlayer(name, startChips);
+        return be.getGame().addPlayer(name, chips);
     }
 
     private static boolean handleJoin(PokerTableBlockEntity be, ServerPlayerEntity player) {
@@ -207,24 +220,35 @@ public class PokerNetworking {
             be.addViewer(player);
             return true;
         }
-        int betLevel = be.getGame().getBetLevel();
-        int minRequired = betLevel * MIN_BALANCE_MULTIPLIER;
+        if (be.getGame().getPlayers().isEmpty()) return false; // Use CREATE for first player
+        int minReq = PokerConfig.get().minZcToJoin;
         int balance = ZCoinStorage.getBalance(player);
-        if (balance < minRequired) {
-            be.getGame().setStatusMessage("Need at least " + minRequired + " ZC to join (BB " + betLevel + ").");
+        if (balance < minReq) {
+            be.getGame().setStatusMessage("Need at least " + minReq + " ZC to join.");
             broadcastState(be);
             return false;
         }
-        int chips = resolveStartChips(player, be.getGame().getStartingChips());
+        // When joining as PENDING (game in progress): don't take chips yet - they stay in inventory
+        // until resetToWaiting runs. Taking here would lose them (addPlayer doesn't store for pending).
+        if (be.getGame().getPhase() != PokerGame.Phase.WAITING) {
+            boolean changed = be.getGame().addPlayer(name, 0);
+            if (changed) be.addViewer(player);
+            return changed;
+        }
+        int chips = resolveStartChips(player);
+        if (chips <= 0) {
+            be.getGame().setStatusMessage("Need ZCoin to join. Use Exchange to deposit items.");
+            broadcastState(be);
+            return false;
+        }
         boolean changed = be.getGame().addPlayer(name, chips);
         if (changed) be.addViewer(player);
         return changed;
     }
 
-    /** Take ZCoin from inventory for table; 0 = use table default. */
-    private static int resolveStartChips(ServerPlayerEntity player, int tableDefault) {
-        int taken = ZCoinStorage.takeAll(player);
-        return taken > 0 ? taken : tableDefault;
+    /** Take ZCoin from inventory for table. Never creates chips from nothing. */
+    private static int resolveStartChips(ServerPlayerEntity player) {
+        return ZCoinStorage.takeAll(player);
     }
 
     private static boolean handleLeave(PokerTableBlockEntity be, ServerPlayerEntity player) {
@@ -236,10 +260,18 @@ public class PokerNetworking {
                     if (ps.chips > 0) ZCoinStorage.giveBack(player, ps.chips);
                 });
         be.removeViewer(player);
-        return be.getGame().removePlayer(name);
+        boolean changed = be.getGame().removePlayer(name);
+        if (changed && be.getGame().getPlayers().isEmpty() && be.getGame().getPendingPlayers().isEmpty()) {
+            be.getGame().resetWhenEmpty();
+        }
+        return changed;
     }
 
     private static boolean handleStart(PokerTableBlockEntity be, ServerPlayerEntity player) {
+        var server = be.getWorld() != null ? be.getWorld().getServer() : null;
+        for (String name : be.getGame().kickPlayersBelowMin(server)) {
+            be.removeViewerByName(name);
+        }
         return be.getGame().startGame();
     }
 
@@ -247,24 +279,21 @@ public class PokerNetworking {
         String owner = be.getGame().getPlayers().isEmpty() ? "" : be.getGame().getPlayers().get(0).name;
         if (!player.getName().getString().equals(owner)) return false;
         var server = be.getWorld() != null ? be.getWorld().getServer() : null;
-        for (PokerGame.PlayerState ps : be.getGame().getPlayers()) {
-            if (ps.chips > 0) {
-                var sp = server.getPlayerManager().getPlayer(ps.name);
-                if (sp != null) ZCoinStorage.giveBack(sp, ps.chips);
-            }
-        }
         be.getGame().resetToWaiting(server);
+        for (String name : be.getGame().kickPlayersBelowMin(server)) {
+            be.removeViewerByName(name);
+        }
         be.getGame().startGame();
         return true;
     }
 
-    /** Buy ZC with items: amount = item count, data = itemId */
+    private static final String[] TRADE_ALLOWED = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
+
+    /** Buy ZC with items: amount = item count, data = itemId. Only iron, gold, emerald, diamond. */
     private static boolean handleDeposit(PokerTableBlockEntity be, ServerPlayerEntity player, int amount, String itemId) {
-        if (itemId == null || itemId.isEmpty()) {
-            // Legacy: use config betItemId
-            itemId = PokerConfig.get().betItemId;
-        }
-        TradeConfig trades = TradeConfig.get();
+        if (itemId == null || itemId.isEmpty()) return false;
+        if (!java.util.Arrays.asList(TRADE_ALLOWED).contains(itemId)) return false;
+        var trades = TradeConfig.get();
         int rate = trades.buyRates.getOrDefault(itemId, 0);
         if (rate <= 0) return false;
 
@@ -285,10 +314,11 @@ public class PokerNetworking {
         return true;
     }
 
-    /** Sell ZC for items: amount = number of withdraw units, data = itemId. cost per unit = sellRate, items per unit = sellGives */
+    /** Sell ZC for items: amount = number of withdraw units, data = itemId. Only iron, gold, emerald, diamond. */
     private static boolean handleWithdraw(PokerTableBlockEntity be, ServerPlayerEntity player, int amount, String itemId) {
         if (itemId == null || itemId.isEmpty()) return false;
-        TradeConfig trades = TradeConfig.get();
+        if (!java.util.Arrays.asList(TRADE_ALLOWED).contains(itemId)) return false;
+        var trades = TradeConfig.get();
         int rate = trades.sellRates.getOrDefault(itemId, 0);
         int gives = trades.sellGives.getOrDefault(itemId, rate);
         if (rate <= 0) return false;

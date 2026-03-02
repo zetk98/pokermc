@@ -40,6 +40,10 @@ public class PokerTableBlockEntity extends BlockEntity {
         viewers.remove(player);
     }
 
+    public void removeViewerByName(String name) {
+        viewers.removeIf(p -> p.getName().getString().equals(name));
+    }
+
     public List<ServerPlayerEntity> getViewers() {
         viewers.removeIf(p -> !p.isAlive() || p.isDisconnected());
         return new ArrayList<>(viewers);
@@ -121,23 +125,21 @@ public class PokerTableBlockEntity extends BlockEntity {
         for (String name : participants) {
             ServerPlayerEntity sp = sw.getServer().getPlayerManager().getPlayer(name);
 
-            // Disconnect / death → forfeit
+            // Bị out bàn: disconnect / chết / mất điện
             if (sp == null || sp.isDisconnected() || !sp.isAlive()) {
                 toForce.add(name);
                 continue;
             }
 
-            // Too far from table → forfeit
+            // Bị out bàn: đẩy ra khỏi khu vực 5 ô
             if (sp.getPos().distanceTo(tableCenter) > MAX_DISTANCE) {
                 toForce.add(name);
-                sp.sendMessage(Text.literal("[Poker] Rời bàn → forfeit!"), true);
+                sp.sendMessage(Text.literal("§e[Poker] §fBị out bàn (quá xa) - chip đã trả lại."), true);
                 continue;
             }
-
-
         }
 
-        // Force fold + remove players who left / disconnected
+        // Out: online → giveBack; offline (văng game) → addToPot
         if (!toForce.isEmpty()) {
             var server = sw.getServer();
             for (String name : toForce) {
@@ -147,11 +149,18 @@ public class PokerTableBlockEntity extends BlockEntity {
                         .ifPresent(ps -> {
                             if (ps.chips > 0) {
                                 var sp = server.getPlayerManager().getPlayer(name);
-                                if (sp != null) com.pokermc.config.ZCoinStorage.giveBack(sp, ps.chips);
+                                if (sp != null) {
+                                    com.pokermc.config.ZCoinStorage.giveBack(sp, ps.chips);
+                                } else {
+                                    game.addToPot(ps.chips);
+                                }
                             }
                         });
                 game.removePlayer(name);
                 be.viewers.removeIf(p -> p.getName().getString().equals(name));
+            }
+            if (game.getPlayers().isEmpty() && game.getPendingPlayers().isEmpty()) {
+                game.resetWhenEmpty();
             }
             be.markDirty();
             PokerNetworking.broadcastState(be);
@@ -180,6 +189,19 @@ public class PokerTableBlockEntity extends BlockEntity {
     @Override
     public Packet<ClientPlayPacketListener> toUpdatePacket() {
         return BlockEntityUpdateS2CPacket.create(this);
+    }
+
+    /** When block is broken: give back chips to all players. Pot is lost. */
+    public void refundAllPlayers() {
+        if (!(getWorld() instanceof ServerWorld sw)) return;
+        var server = sw.getServer();
+        if (server == null) return;
+        for (PokerGame.PlayerState ps : game.getPlayers()) {
+            if (ps.chips > 0) {
+                var sp = server.getPlayerManager().getPlayer(ps.name);
+                if (sp != null) com.pokermc.config.ZCoinStorage.giveBack(sp, ps.chips);
+            }
+        }
     }
 
     // ── Getters ────────────────────────────────────────────────────────────────

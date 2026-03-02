@@ -36,3 +36,16 @@ config/pokermc_wallets.json
 # Logs
 *.log
 logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# Decompile artifacts
+decompiled/
+cfr-*.jar
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Backup/temp
+*_backup.png

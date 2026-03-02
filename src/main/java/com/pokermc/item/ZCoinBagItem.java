@@ -46,16 +46,16 @@ public class ZCoinBagItem extends Item {
 
     public static int getBalance(ItemStack stack) {
         if (stack.isEmpty() || !(stack.getItem() instanceof ZCoinBagItem)) return 0;
+        int containerTotal = 0;
         var container = stack.get(net.minecraft.component.DataComponentTypes.CONTAINER);
         if (container != null) {
-            int total = 0;
             for (var s : container.iterateNonEmpty()) {
-                if (s.getItem() == PokerMod.ZCOIN_ITEM) total += s.getCount();
+                if (s.getItem() == PokerMod.ZCOIN_ITEM) containerTotal += s.getCount();
             }
-            return total;
         }
-        Integer val = stack.get(PokerComponents.ZCOIN_BAG_BALANCE);
-        return val != null ? Math.max(0, val) : 0;
+        Integer balanceVal = stack.get(PokerComponents.ZCOIN_BAG_BALANCE);
+        int legacyTotal = balanceVal != null ? Math.max(0, balanceVal) : 0;
+        return Math.max(containerTotal, legacyTotal);
     }
 
     public static void setBalance(ItemStack stack, int amount) {
@@ -75,6 +75,7 @@ public class ZCoinBagItem extends Item {
         } else {
             stack.set(PokerComponents.ZCOIN_BAG_BALANCE, amount);
         }
+        if (amount == 0) stack.remove(PokerComponents.ZCOIN_BAG_BALANCE);
     }
 
     public static void addBalance(ItemStack stack, int amount) {

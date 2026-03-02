@@ -36,5 +36,15 @@ public class PokerRecipeProvider extends FabricRecipeProvider {
                 .input('L', Items.LEATHER)
                 .criterion(hasItem(Items.LEATHER), conditionsFromItem(Items.LEATHER))
                 .offerTo(exporter);
+
+        ShapedRecipeJsonBuilder.create(RecipeCategory.BUILDING_BLOCKS, PokerMod.BLACKJACK_TABLE_ITEM)
+                .pattern("RRR")
+                .pattern("R R")
+                .pattern("W W")
+                .input('R', Items.PINK_WOOL)
+                .input('W', Items.OAK_PLANKS)
+                .criterion(hasItem(Items.PINK_WOOL), conditionsFromItem(Items.PINK_WOOL))
+                .criterion(hasItem(Items.OAK_PLANKS), conditionsFromItem(Items.OAK_PLANKS))
+                .offerTo(exporter);
     }
 }

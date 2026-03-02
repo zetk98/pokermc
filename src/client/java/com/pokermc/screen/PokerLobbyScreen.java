@@ -33,12 +33,14 @@ public class PokerLobbyScreen extends Screen {
 
     private final BlockPos tablePos;
     private String stateJson = "{}";
+    private int framesOpen = 0;
 
     // Parsed state
     private final List<String> playerNames = new ArrayList<>();
     private boolean isEmpty = true;
     private int bankBalance = 0;
     private int betLevel = 10;
+    private int minZcToJoin = 10;
 
     public PokerLobbyScreen(BlockPos pos, String stateJson) {
         super(Text.literal("Poker Lobby"));
@@ -59,13 +61,22 @@ public class PokerLobbyScreen extends Screen {
         int btnW = 120, btnH = 24;
         int btnX = bgX + (BG_W - btnW) / 2;
 
-        // ── Button 1: Create Room / Join Game / Enter Table ──────────────────
+        // ── Button 1: Create Room / Enter Table / Join Game ────────────────────
         String myName = client.player != null ? client.player.getName().getString() : "";
         boolean alreadyInGame = playerNames.contains(myName);
         if (isEmpty) {
+            boolean canCreate = bankBalance >= minZcToJoin;
             addDrawableChild(ButtonWidget.builder(Text.literal("✦ Create Room"),
-                    b -> client.setScreen(new CreateRoomScreen(tablePos, stateJson)))
-                    .dimensions(btnX, bgY + 75, btnW, btnH).build());
+                    b -> {
+                        if (!canCreate) return;
+                        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                new com.pokermc.network.PokerNetworking.PlayerActionPayload(
+                                        tablePos, "CREATE", 0, ""));
+                        PokerTableScreen ts = new PokerTableScreen(tablePos, stateJson);
+                        client.setScreen(ts);
+                        ts.updateState(stateJson);
+                    })
+                    .dimensions(btnX, bgY + 75, btnW, btnH).build()).active = canCreate;
         } else if (alreadyInGame) {
             addDrawableChild(ButtonWidget.builder(Text.literal("▶ Enter Table"),
                     b -> {
@@ -75,8 +86,7 @@ public class PokerLobbyScreen extends Screen {
                     })
                     .dimensions(btnX, bgY + 75, btnW, btnH).build());
         } else {
-            int minRequired = betLevel * 10;
-            boolean canJoin = bankBalance >= minRequired;
+            boolean canJoin = bankBalance >= minZcToJoin;
             var joinBtn = ButtonWidget.builder(Text.literal("▶ Join Game"),
                     b -> {
                         if (!canJoin) return;
@@ -115,6 +125,7 @@ public class PokerLobbyScreen extends Screen {
             isEmpty     = !obj.has("isEmpty") || obj.get("isEmpty").getAsBoolean();
             betLevel    = obj.has("betLevel")     ? obj.get("betLevel").getAsInt()     : 10;
             bankBalance = obj.has("bankBalance")  ? obj.get("bankBalance").getAsInt()  : 0;
+            minZcToJoin = obj.has("minZcToJoin")  ? obj.get("minZcToJoin").getAsInt()  : 10;
         } catch (Exception ignored) {}
     }
 
@@ -131,6 +142,7 @@ public class PokerLobbyScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        if (framesOpen < 10) framesOpen++;
         int cx = width / 2, cy = height / 2;
         int bgX = cx - BG_W / 2, bgY = cy - BG_H / 2;
 
@@ -141,7 +153,7 @@ public class PokerLobbyScreen extends Screen {
 
         if (isEmpty) {
             ctx.drawCenteredTextWithShadow(textRenderer,
-                    "Empty — be the first to create a room", cx, bgY + 38, C_GRAY);
+                    "Empty — Create room to start", cx, bgY + 38, C_GRAY);
         } else {
             String bb = betLevel >= 1000 ? (betLevel/1000) + "K" : String.valueOf(betLevel);
             ctx.drawCenteredTextWithShadow(textRenderer,
@@ -163,11 +175,17 @@ public class PokerLobbyScreen extends Screen {
                 ctx.drawTextWithShadow(textRenderer, "+" + (playerNames.size() - 6), colLeft, lineY + 60, C_GRAY);
         }
 
-        // ZCoin
+        // ZCoin (min to join)
         ctx.drawCenteredTextWithShadow(textRenderer,
-                "ZCoin: " + bankBalance, cx, bgY + BG_H - 16, C_GREEN);
+                "ZCoin: " + bankBalance + " (min " + minZcToJoin + " to join)", cx, bgY + BG_H - 16, C_GREEN);
 
         super.render(ctx, mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (framesOpen < 5) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override

@@ -57,6 +57,22 @@ public record Card(Rank rank, Suit suit) {
         return rank.symbol + suit.symbol;
     }
 
+    /** Blackjack value: 2-10 face, J/Q/K=10, A=11 */
+    public int getBlackjackValue() {
+        return switch (rank) {
+            case TWO -> 2;
+            case THREE -> 3;
+            case FOUR -> 4;
+            case FIVE -> 5;
+            case SIX -> 6;
+            case SEVEN -> 7;
+            case EIGHT -> 8;
+            case NINE -> 9;
+            case TEN, JACK, QUEEN, KING -> 10;
+            case ACE -> 11;
+        };
+    }
+
     public static Card fromCode(String code) {
         if (code == null || code.length() < 2) throw new IllegalArgumentException("Bad code: " + code);
         // Rank symbol can be 1 char (2-9, T, J, Q, K, A)

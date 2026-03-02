@@ -1,6 +1,7 @@
 package com.pokermc.game;
 
 import com.pokermc.config.PokerConfig;
+import com.pokermc.config.ZCoinStorage;
 
 import java.util.*;
 import java.util.Collections;
@@ -47,25 +48,11 @@ public class PokerGame {
     private String statusMessage = "Waiting for players...";
     private long turnStartTick = 0;
 
-    // ── Per-table bet level (overrides global config) ─────────────────────────
-    private int betLevel      = 10;
-    private int smallBlind    = 5;
-    private int bigBlind      = 10;
-    private int minRaise      = 10;
-    private int startingChips = 1000; // 100 BB default
-
-    public void setBetLevel(int level) {
-        this.betLevel      = level;
-        this.smallBlind    = Math.max(1, level / 2);
-        this.bigBlind      = level;
-        this.minRaise      = level;
-        this.startingChips = level * 100;
-        statusMessage = "Room created. Blinds: " + smallBlind + "/" + bigBlind
-                      + ".  Stack: " + startingChips;
-    }
-
-    public int getBetLevel()      { return betLevel; }
-    public int getStartingChips() { return startingChips; }
+    // Blinds from config - no room level, free bet
+    private int smallBlind() { return Math.max(1, PokerConfig.get().smallBlindAmount); }
+    private int bigBlind()   { return Math.max(1, PokerConfig.get().bigBlindAmount); }
+    private int minRaise()   { return Math.max(1, PokerConfig.get().minRaiseAmount); }
+    public int getBetLevel() { return bigBlind(); }
 
     // ── Player management ──────────────────────────────────────────────────────
 
@@ -80,10 +67,10 @@ public class PokerGame {
             return true;
         }
 
-        PokerConfig cfg = PokerConfig.get();
+        var cfg = PokerConfig.get();
         if (players.size() >= cfg.maxPlayers) return false;
-        int chips = customChips > 0 ? customChips : startingChips;
-        players.add(new PlayerState(name, chips));
+        if (customChips <= 0) return false;
+        players.add(new PlayerState(name, customChips));
         statusMessage = name + " joined the table.";
         return true;
     }
@@ -124,6 +111,27 @@ public class PokerGame {
 
     public List<String> getPendingPlayers() { return Collections.unmodifiableList(pendingPlayers); }
 
+    /** Reset to empty room when everyone has left. Pot is lost. */
+    public void resetWhenEmpty() {
+        if (!players.isEmpty() || !pendingPlayers.isEmpty()) return;
+        players.clear();
+        pendingPlayers.clear();
+        communityCards.clear();
+        deck.reset();
+        phase = Phase.WAITING;
+        pot = 0;
+        currentBet = 0;
+        dealerIndex = 0;
+        currentPlayerIndex = -1;
+        lastRaiserIndex = -1;
+        firstCheckerIndex = -1;
+        lastWinner = "";
+        lastWinningHand = "";
+        lastPotWon = 0;
+        statusMessage = "Waiting for players...";
+        turnStartTick = 0;
+    }
+
     /** Add chips directly to a player already seated (e.g. from deposit). */
     public boolean addChips(String name, int amount) {
         PlayerState p = players.stream().filter(ps -> ps.name.equals(name)).findFirst().orElse(null);
@@ -134,6 +142,32 @@ public class PokerGame {
     }
 
     // ── Game start ─────────────────────────────────────────────────────────────
+
+    /** Kick players with chips < minZcToJoin before new game. Returns kicked names. */
+    public List<String> kickPlayersBelowMin(net.minecraft.server.MinecraftServer server) {
+        int min = PokerConfig.get().minZcToJoin;
+        List<String> kicked = new ArrayList<>();
+        for (int i = players.size() - 1; i >= 0; i--) {
+            PlayerState p = players.get(i);
+            if (p.chips < min) {
+                kicked.add(p.name);
+                if (server != null) {
+                    var sp = server.getPlayerManager().getPlayer(p.name);
+                    if (sp != null) {
+                        ZCoinStorage.giveBack(sp, p.chips);
+                        sp.sendMessage(net.minecraft.text.Text.literal("§e[Poker] §fBị kick - cần tối thiểu " + min + " ZC để chơi."), true);
+                    } else {
+                        addToPot(p.chips);
+                    }
+                } else {
+                    addToPot(p.chips);
+                }
+                players.remove(i);
+            }
+        }
+        if (!kicked.isEmpty()) statusMessage = String.join(", ", kicked) + " bị kick (< " + min + " ZC).";
+        return kicked;
+    }
 
     public boolean startGame() {
         if (phase != Phase.WAITING) return false;
@@ -167,9 +201,9 @@ public class PokerGame {
 
         int sbIdx = (dealerIndex + 1) % players.size();
         int bbIdx = (dealerIndex + 2) % players.size();
-        postBlind(sbIdx, smallBlind);
-        postBlind(bbIdx, bigBlind);
-        currentBet = bigBlind;
+        postBlind(sbIdx, smallBlind());
+        postBlind(bbIdx, bigBlind());
+        currentBet = bigBlind();
 
         // UTG acts first pre-flop
         currentPlayerIndex = (dealerIndex + 3) % players.size();
@@ -219,7 +253,8 @@ public class PokerGame {
                 statusMessage = playerName + " called " + toCall + ".";
             }
             case RAISE -> {
-                if (amount < minRaise) return false;
+                if (players.stream().anyMatch(p -> p.allIn)) return false; // All-in: no raise
+                if (amount < minRaise()) return false;
                 int toCall = currentBet - cur.currentBet;
                 int total = Math.min(toCall + amount, cur.chips);
                 if (total <= 0) return false;
@@ -237,6 +272,7 @@ public class PokerGame {
                 statusMessage = playerName + " raised to " + currentBet + ".";
             }
             case ALLIN -> {
+                if (players.stream().anyMatch(p -> p.allIn)) return false; // All-in: no all-in
                 int allInAmt = cur.chips;
                 if (allInAmt <= 0) return false;
                 cur.chips = 0;
@@ -369,9 +405,9 @@ public class PokerGame {
                 statusMessage = winner.name + " wins " + pot + " ZC! (everyone else folded)";
             }
         } else {
-            // Showdown - evaluate hands
+            // Showdown - evaluate hands, handle ties (split pot evenly)
             List<Card> board = new ArrayList<>(communityCards);
-            PlayerState winner = null;
+            List<PlayerState> winners = new ArrayList<>();
             HandEvaluator.HandResult bestHand = null;
 
             for (PlayerState p : players) {
@@ -382,17 +418,24 @@ public class PokerGame {
                     HandEvaluator.HandResult hand = HandEvaluator.evaluate(allCards);
                     if (bestHand == null || hand.compareTo(bestHand) > 0) {
                         bestHand = hand;
-                        winner = p;
+                        winners.clear();
+                        winners.add(p);
+                    } else if (hand.compareTo(bestHand) == 0) {
+                        winners.add(p);
                     }
                 }
             }
 
-            if (winner != null) {
+            if (!winners.isEmpty()) {
                 lastPotWon = pot;
-                winner.chips += pot;
-                lastWinner = winner.name;
+                int each = pot / winners.size();
+                int remainder = pot % winners.size();
+                for (int i = 0; i < winners.size(); i++) {
+                    winners.get(i).chips += each + (i < remainder ? 1 : 0);
+                }
+                lastWinner = String.join(" & ", winners.stream().map(p -> p.name).toList());
                 lastWinningHand = bestHand != null ? bestHand.getDisplayName() : "";
-                statusMessage = winner.name + " wins " + pot + " ZC with " + lastWinningHand + "!";
+                statusMessage = lastWinner + (winners.size() > 1 ? " split " : " wins ") + pot + " ZC with " + lastWinningHand + "!";
             }
         }
 
@@ -404,31 +447,25 @@ public class PokerGame {
 
     public void resetToWaiting(net.minecraft.server.MinecraftServer server) {
         if (phase != Phase.SHOWDOWN) return;
-        PokerConfig cfg = PokerConfig.get();
+        var cfg = PokerConfig.get();
         for (PlayerState p : players) {
-            int chips = resolveStartChipsForReset(p.name, server);
-            p.chips = chips;
             p.holeCards.clear();
             p.currentBet = 0;
             p.folded = false;
             p.allIn = false;
             p.hasActed = false;
         }
-        for (String name : pendingPlayers)
-            if (players.size() < cfg.maxPlayers)
-                players.add(new PlayerState(name, resolveStartChipsForReset(name, server)));
+        for (String name : pendingPlayers) {
+            if (players.size() >= cfg.maxPlayers) break;
+            if (server == null) continue;
+            var sp = server.getPlayerManager().getPlayer(name);
+            if (sp == null) continue;
+            int chips = com.pokermc.config.ZCoinStorage.takeAll(sp);
+            if (chips > 0) players.add(new PlayerState(name, chips));
+        }
         pendingPlayers.clear();
         phase = Phase.WAITING;
         statusMessage = "Ready for next game.";
-    }
-
-    /** Take ZCoin from inventory for new game; 0 = use table default. */
-    private int resolveStartChipsForReset(String name, net.minecraft.server.MinecraftServer server) {
-        if (server == null) return startingChips;
-        var sp = server.getPlayerManager().getPlayer(name);
-        if (sp == null) return startingChips;
-        int taken = com.pokermc.config.ZCoinStorage.takeAll(sp);
-        return taken > 0 ? taken : startingChips;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -444,6 +481,11 @@ public class PokerGame {
     public List<PlayerState> getPlayers() { return players; }
     public List<Card> getCommunityCards() { return communityCards; }
     public int getPot() { return pot; }
+
+    /** Add chips to pot (e.g. when player leaves mid-game and can't receive chips back). */
+    public void addToPot(int amount) {
+        if (amount > 0) pot += amount;
+    }
     public int getCurrentBet() { return currentBet; }
     public String getCurrentPlayerName() {
         PlayerState p = currentPlayer();

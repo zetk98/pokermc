@@ -10,7 +10,7 @@ Output files:
   src/main/resources/assets/pokermc/textures/gui/lobby_bg.png     (260x180) - lobby/landing screen
   src/main/resources/assets/pokermc/textures/block/poker_table_top.png, poker_table_side.png - block
 """
-import struct, zlib, os, math
+import struct, zlib, os, math, random
 
 # ---------------------------------------------------------------------------
 # Raw PNG writer (no Pillow required)
@@ -79,6 +79,11 @@ FONT_3x5 = {
     'O':['111','101','101','101','111'],
     'E':['111','100','111','100','111'],
     'R':['111','101','111','110','101'],
+    # BLACKJACK text
+    'B':['110','101','110','101','110'],
+    'L':['100','100','100','100','111'],
+    'C':['111','100','100','100','111'],
+    'K':['101','110','100','110','101'],
 }
 
 def draw_char(pixels, W, cx, cy, ch, color):
@@ -116,6 +121,23 @@ def draw_suit(pixels, W, cx, cy, suit, color):
             if bit == '1':
                 px(pixels, W, cx+col, cy+row, color)
 
+# Cherry blossom: petal (5x3) + 5-petal flower (7x7)
+CHERRY_PETAL = ['010', '111', '111', '110', '010']
+CHERRY_FLOWER = [
+    '0010100', '0101010', '1011101', '0111110',
+    '1011101', '0101010', '0010100'
+]
+def draw_cherry_petal(pixels, W, cx, cy, color):
+    for row, line in enumerate(CHERRY_PETAL):
+        for col, bit in enumerate(line):
+            if bit == '1':
+                px(pixels, W, cx+col, cy+row, color)
+def draw_cherry_flower(pixels, W, cx, cy, color):
+    for row, line in enumerate(CHERRY_FLOWER):
+        for col, bit in enumerate(line):
+            if bit == '1':
+                px(pixels, W, cx+col, cy+row, color)
+
 # ---------------------------------------------------------------------------
 # Palette
 # ---------------------------------------------------------------------------
@@ -130,7 +152,7 @@ DARK_BG= (12, 12, 18, 255)
 FELT   = (18, 80, 18, 255)
 FELT_L = (25, 100, 25, 255)
 
-BASE = "src/main/resources/assets/pokermc/textures"
+BASE = "src/main/resources/assets/casinocraft/textures"
 
 # ---------------------------------------------------------------------------
 # Card atlas  (286 x 128  = 13 cols x 4 rows, each card 22x32)
@@ -278,6 +300,26 @@ def make_card_back():
 
     write_png(f"{BASE}/gui/card_back.png", pixels, W, H)
 
+def make_card_back_blackjack():
+    """Card back blackjack: same design as poker, pink tone."""
+    W, H = CARD_W, CARD_H
+    pixels = new_canvas(W, H)
+
+    PINK_DARK = (45, 12, 35, 255)   # nền hồng đậm (thay navy)
+    PINK_GOLD = (200, 130, 160, 255)   # viền hồng vàng (rose gold)
+    PINK_L    = (230, 160, 190, 255)   # viền trong sáng hơn
+    PINK_BR   = (255, 200, 220, 255)   # chữ Z sáng
+
+    fill(pixels, W, 0, 0, W, H, PINK_DARK)
+    border(pixels, W, 0, 0, W, H,     PINK_GOLD, 1)
+    border(pixels, W, 2, 2, W-2, H-2, PINK_L,    1)
+    for (ocx, ocy) in [(3, 3), (W-4, 3), (3, H-4), (W-4, H-4)]:
+        px(pixels, W, ocx, ocy, PINK_L)
+    zx, zy = W//2 - 3, H//2 - 5
+    draw_char_2x(pixels, W, zx, zy, 'Z', PINK_BR)
+
+    write_png(f"{BASE}/gui/card_back_blackjack.png", pixels, W, H)
+
 # ---------------------------------------------------------------------------
 # Game table GUI background  (360x230) - dark elegant with gold details
 # ---------------------------------------------------------------------------
@@ -356,6 +398,100 @@ def make_lobby_bg():
 
     write_png(f"{BASE}/gui/lobby_bg.png", pixels, W, H)
 
+def make_lobby_bg_blackjack():
+    """Lobby bg blackjack: pink tone + cherry blossom falling animation.
+    Texture keo dai: 260 x (180*8) = sprite sheet 8 frames, hoa roi tu tren xuong."""
+    W, FRAME_H = 260, 180
+    NUM_FRAMES = 8
+    FALL_STEP = 24
+    total_h = FRAME_H * NUM_FRAMES
+    pixels = new_canvas(W, total_h)
+
+    PINK_BG   = (25, 12, 22, 255)
+    PINK_GOLD = (200, 120, 150, 255)
+    PINK_DIM  = (80, 40, 60, 255)
+    PINK_BAR  = (35, 18, 30, 255)
+    PETAL     = (255, 180, 200, 255)
+    PETAL_L   = (255, 210, 225, 255)
+    FLOWER    = (255, 150, 180, 255)
+
+    rng = random.Random(42)
+    petal_data = [(rng.randint(0, W-6), rng.randint(0, 220), PETAL if rng.random() > 0.3 else PETAL_L)
+                  for _ in range(40)]
+    flower_data = [(rng.randint(0, W-8), rng.randint(0, 220)) for _ in range(14)]
+
+    for frame in range(NUM_FRAMES):
+        y0 = frame * FRAME_H
+        fill(pixels, W, 0, y0, W, y0 + FRAME_H, PINK_BG)
+        border(pixels, W, 0, y0, W, y0 + FRAME_H, PINK_GOLD, 2)
+        border(pixels, W, 3, y0+3, W-3, y0+FRAME_H-3, (70, 35, 55, 255), 1)
+        border(pixels, W, 5, y0+5, W-5, y0+FRAME_H-5, PINK_GOLD, 1)
+        cx, cy = W//2, y0 + FRAME_H//2
+        for i in range(0, min(W,FRAME_H)//2 - 20, 15):
+            for angle_deg in range(0, 360, 5):
+                a = math.radians(angle_deg)
+                ex = int(cx + math.cos(a) * i)
+                ey = int(cy + math.sin(a) * i * 0.6)
+                if 0 <= ex < W and y0 <= ey < y0 + FRAME_H:
+                    pixels[ey * W + ex] = PINK_DIM
+        for (ox, oy, suit) in [(15,y0+15,'S'),(W-25,y0+15,'H'),(15,y0+FRAME_H-22,'D'),(W-25,y0+FRAME_H-22,'C')]:
+            draw_suit(pixels, W, ox, oy, suit, (90, 50, 70, 255))
+        fill(pixels, W, 6, y0+30, W-6, y0+50, PINK_BAR)
+        border(pixels, W, 6, y0+30, W-6, y0+50, PINK_GOLD, 1)
+
+        for (px, base_y, col) in petal_data:
+            ty = (base_y + frame * FALL_STEP) % 240 - 10
+            if 0 <= ty < FRAME_H - 5:
+                draw_cherry_petal(pixels, W, px, y0 + ty, col)
+        for (fx, base_y) in flower_data:
+            ty = (base_y + frame * FALL_STEP) % 240 - 10
+            if 0 <= ty < FRAME_H - 7:
+                draw_cherry_flower(pixels, W, fx, y0 + ty, FLOWER)
+
+    write_png(f"{BASE}/gui/lobby_bg_blackjack.png", pixels, W, total_h)
+
+def make_blackjack_table_bg():
+    """Blackjack table bg: pastel pink + black, tuoi hon."""
+    W, H = 360, 230
+    pixels = new_canvas(W, H)
+
+    BLACK_BG  = (12, 12, 15, 255)       # nền đen
+    PASTEL_PK = (255, 182, 193, 255)   # pastel pink (light pink)
+    PASTEL_L  = (255, 200, 210, 255)   # pastel sáng hơn
+    FELT_PASTEL = (255, 180, 200, 255) # felt oval hồng pastel
+
+    fill(pixels, W, 0, 0, W, H, BLACK_BG)
+    border(pixels, W, 0, 0, W, H, PASTEL_PK, 3)
+    border(pixels, W, 4, 4, W-4, H-4, (30, 25, 30, 255), 1)
+
+    cx, cy = W//2, H//2
+    for y in range(H):
+        for x in range(W):
+            dx = (x - cx) / (W/2 - 20)
+            dy = (y - cy) / (H/2 - 20)
+            if dx*dx + dy*dy < 1.0:
+                dist = dx*dx + dy*dy
+                intensity = int(20 + (1.0 - dist) * 35)
+                r = min(255, 250)
+                g = min(255, 180 + intensity)
+                b = min(255, 190 + intensity)
+                fill(pixels, W, x, y, x+1, y+1, (r, g, b, 255))
+
+    for angle_deg in range(0, 360, 2):
+        a = math.radians(angle_deg)
+        ex = int(cx + math.cos(a) * (W/2 - 22))
+        ey = int(cy + math.sin(a) * (H/2 - 22))
+        if 0 <= ex < W and 0 <= ey < H:
+            pixels[ey * W + ex] = PASTEL_PK
+
+    PINK_L = PASTEL_L
+    for ox, oy in [(10,10),(W-10,10),(10,H-10),(W-10,H-10)]:
+        for d in [-2,-1,0,1,2]:
+            px(pixels, W, ox, oy+d, PINK_L)
+            px(pixels, W, ox+d, oy, PINK_L)
+
+    write_png(f"{BASE}/gui/blackjack_table_bg.png", pixels, W, H)
+
 # ---------------------------------------------------------------------------
 # Block texture  (16x16)
 # ---------------------------------------------------------------------------
@@ -409,17 +545,71 @@ def make_block_texture():
     write_png(f"{BASE}/block/poker_table_side.png", side, W, H)
 
 # ---------------------------------------------------------------------------
+# Blackjack table block: top = felt HỒNG + BLACKJACK 2 hàng đen + ZCoin
+# ---------------------------------------------------------------------------
+def make_blackjack_table_top():
+    W = H = 16
+    FELT_PINK   = (180, 80, 110, 255)   # nền hồng
+    FELT_PINK_L = (220, 120, 150, 255)  # hồng sáng (texture)
+    FELT_PINK_D = (140, 50, 80, 255)   # hồng đậm (texture)
+    GOLD        = (212, 175, 55, 255)
+    GOLD_L      = (255, 223, 100, 255)
+    BLACK       = (15, 15, 15, 255)
+
+    top = new_canvas(W, H)
+    fill(top, W, 0, 0, W, H, FELT_PINK)
+    border(top, W, 0, 0, W, H, GOLD, 1)
+    fill(top, W, 1, 1, W-1, H-1, FELT_PINK)
+
+    # Texture nhẹ: vài pixel hồng sáng/đậm
+    for _ in range(8):
+        px(top, W, 2 + (_ % 4) * 3, 2 + (_ % 3) * 4, FELT_PINK_L)
+    for _ in range(8):
+        px(top, W, 3 + (_ % 4) * 3, 5 + (_ % 3) * 3, FELT_PINK_D)
+
+    # BLACKJACK 2 hàng, màu đen, căn giữa (spacing 3 = mỗi chữ 3px rộng)
+    # BLACK: 5×3=15 → x=(16-15)//2=0
+    # JACK: 4×3=12 → x=(16-12)//2=2
+    draw_text_compact(top, W, 0, 2, "BLACK", BLACK, 3)
+    draw_text_compact(top, W, 2, 7, "JACK", BLACK, 3)
+
+    # ZCoin icons (giống poker: dưới chữ)
+    draw_zcoin_mini(top, W, 2, 10, GOLD)
+    draw_zcoin_mini(top, W, 9, 10, GOLD)
+    draw_char(top, W, 3, 11, 'Z', (180, 140, 40, 255))
+    draw_char(top, W, 10, 11, 'Z', (180, 140, 40, 255))
+
+    # Ghi đè vùng text cũ nếu có (đã fill FELT_PINK rồi)
+    write_png(f"{BASE}/block/blackjack_table_top.png", top, W, H)
+
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    print("Generating PokerMC textures...")
+    print("Generating CasinoCraft textures...")
     make_card_atlas()
-    make_card_back()
-    make_table_bg()
-    make_lobby_bg()
-    make_block_texture()
+    # make_card_back()  # Skipped - keep original poker card back
+    make_card_back_blackjack()
+    # make_table_bg()   # Skipped - keep original poker
+    # make_lobby_bg()   # Skipped - keep original poker
+    make_blackjack_table_bg()
+    make_lobby_bg_blackjack()
+    # make_block_texture()  # Skipped - keep original poker textures
+    try:
+        import subprocess, sys
+        r = subprocess.run([sys.executable, "create_blackjack_from_poker.py"], capture_output=True, text=True)
+        if r.returncode == 0:
+            print(r.stdout.strip() or "  blackjack_table_top from poker")
+        else:
+            make_blackjack_table_top()
+    except Exception:
+        make_blackjack_table_top()
     print("\nDone! Editable PNG files:")
     print(f"  {BASE}/gui/card_atlas.png   - 52 cards (13 cols x 4 rows)")
     print(f"  {BASE}/gui/card_back.png    - card back design")
+    print(f"  {BASE}/gui/card_back_blackjack.png - card back (pink)")
     print(f"  {BASE}/gui/poker_table_bg.png - game table background")
     print(f"  {BASE}/gui/lobby_bg.png     - lobby/landing screen background")
+    print(f"  {BASE}/gui/blackjack_table_bg.png - blackjack table (pink-black)")
+    print(f"  {BASE}/gui/lobby_bg_blackjack.png - blackjack lobby (pink + cherry blossom)")
     print(f"  {BASE}/block/poker_table_top.png  - block top (felt + POKER + ZCoin)")
-    print(f"  {BASE}/block/poker_table_side.png - block side (wood)")
+    print(f"  {BASE}/block/poker_table_side.png - block side")
+    print(f"  {BASE}/block/blackjack_table_top.png - blackjack top (pink felt + BLACKJACK)")

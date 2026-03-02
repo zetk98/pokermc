@@ -22,7 +22,7 @@ import java.util.List;
  *  BUY tab  → deposit items, receive ZC
  *  SELL tab → spend ZC, receive items
  *
- * Items and rates come from config/pokermc_trades.json (sent via state JSON).
+ * Items and rates come from config/casinocraft.json (sent via state JSON).
  */
 public class TradeScreen extends Screen {
 
@@ -49,6 +49,8 @@ public class TradeScreen extends Screen {
     }
 
     private final BlockPos tablePos;
+    private final boolean isBlackjack;
+    private int framesOpen = 0;
     private final List<TradeItem> items = new ArrayList<>();
     private int bankBalance;
     private boolean buyMode = true;       // true = BUY, false = SELL
@@ -56,8 +58,13 @@ public class TradeScreen extends Screen {
     private int amount = 1;
 
     public TradeScreen(BlockPos tablePos, String stateJson) {
+        this(tablePos, stateJson, false);
+    }
+
+    public TradeScreen(BlockPos tablePos, String stateJson, boolean isBlackjack) {
         super(Text.literal("Trade"));
         this.tablePos = tablePos;
+        this.isBlackjack = isBlackjack;
         parseState(stateJson);
     }
 
@@ -77,12 +84,12 @@ public class TradeScreen extends Screen {
                             to.has("sellGives") ? to.get("sellGives").getAsInt() : sellRate));
                 }
             }
-            // Default items if server didn't send any
+            // Default items if server didn't send any (buy: 1 iron=2zc, 1 gold=3zc, 1 emerald=7zc, 1 diamond=13zc)
             if (items.isEmpty()) {
-                items.add(new TradeItem("minecraft:iron_ingot",  1,  1,  2));
-                items.add(new TradeItem("minecraft:gold_ingot",  2,  2,  4));
-                items.add(new TradeItem("minecraft:emerald",    5,  5,  8));
-                items.add(new TradeItem("minecraft:diamond",    10, 10, 13));
+                items.add(new TradeItem("minecraft:iron_ingot",  2,  2,  1));
+                items.add(new TradeItem("minecraft:gold_ingot",  3,  3,  1));
+                items.add(new TradeItem("minecraft:emerald",    7,  7,  1));
+                items.add(new TradeItem("minecraft:diamond",    13, 13, 1));
             }
             if (selectedIdx >= items.size()) selectedIdx = 0;
         } catch (Exception ignored) {}
@@ -150,15 +157,25 @@ public class TradeScreen extends Screen {
                         int avail = availableInInventory(selectedIdx);
                         if (avail <= 0) return;
                         int actual = Math.min(amount, avail);
-                        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
-                                new PokerNetworking.PlayerActionPayload(
-                                        tablePos, "DEPOSIT", actual, ti.id()));
+                        if (isBlackjack)
+                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                    new com.pokermc.network.BlackjackNetworking.BlackjackActionPayload(
+                                            tablePos, "DEPOSIT", actual, ti.id()));
+                        else
+                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                    new PokerNetworking.PlayerActionPayload(
+                                            tablePos, "DEPOSIT", actual, ti.id()));
                     } else {
                         int cost = amount * ti.sellRate();
                         if (bankBalance < cost) return;
-                        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
-                                new PokerNetworking.PlayerActionPayload(
-                                        tablePos, "WITHDRAW", amount, ti.id()));
+                        if (isBlackjack)
+                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                    new com.pokermc.network.BlackjackNetworking.BlackjackActionPayload(
+                                            tablePos, "WITHDRAW", amount, ti.id()));
+                        else
+                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                    new PokerNetworking.PlayerActionPayload(
+                                            tablePos, "WITHDRAW", amount, ti.id()));
                     }
                     close();
                 })
@@ -187,6 +204,7 @@ public class TradeScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        if (framesOpen < 10) framesOpen++;
         int cx = width / 2, cy = height / 2;
         int x0 = cx - W / 2, y0 = cy - H / 2;
 
@@ -219,22 +237,23 @@ public class TradeScreen extends Screen {
             // Item name
             ctx.drawTextWithShadow(textRenderer, ti.displayName(), x0 + 14, ry + 6, C_WHITE);
 
-            // Available / rate
+            // Rate + Max
             int avail = availableInInventory(i);
             if (buyMode) {
-                ctx.drawTextWithShadow(textRenderer,
-                        "In bag: " + avail, x0 + 100, ry + 6, avail > 0 ? C_CYAN : C_GRAY);
-                String rate = "1 = " + ti.buyRate() + " ZC";
-                ctx.drawTextWithShadow(textRenderer, rate,
-                        x0 + W - 14 - textRenderer.getWidth(rate), ry + 6, C_GOLD);
+                String rate = "1 " + ti.displayName() + " = " + ti.buyRate() + " ZC";
+                ctx.drawTextWithShadow(textRenderer, rate, x0 + 100, ry + 6, C_GOLD);
+                String maxStr = "Max: " + avail;
+                ctx.drawTextWithShadow(textRenderer, maxStr,
+                        x0 + W - 14 - textRenderer.getWidth(maxStr), ry + 6,
+                        avail > 0 ? C_CYAN : C_GRAY);
             } else {
                 int gives = ti.itemsPerUnit();
                 String rate = ti.sellRate() + " ZC = " + gives;
                 ctx.drawTextWithShadow(textRenderer, rate, x0 + 100, ry + 6, C_GOLD);
                 int maxUnits = ti.sellRate() > 0 ? bankBalance / ti.sellRate() : 0;
-                String canStr = "Max: " + maxUnits;
-                ctx.drawTextWithShadow(textRenderer, canStr,
-                        x0 + W - 14 - textRenderer.getWidth(canStr), ry + 6,
+                String maxStr = "Max: " + maxUnits;
+                ctx.drawTextWithShadow(textRenderer, maxStr,
+                        x0 + W - 14 - textRenderer.getWidth(maxStr), ry + 6,
                         maxUnits > 0 ? C_CYAN : C_GRAY);
             }
         }
@@ -243,26 +262,20 @@ public class TradeScreen extends Screen {
         int ctrlY = rowY + items.size() * 22 + 10;
         ctx.drawCenteredTextWithShadow(textRenderer, "Qty: " + amount, cx - 70, ctrlY + 4, C_WHITE);
 
-        // Preview — bottom-left corner (no overlap)
+        // ── Bottom right: preview result (Buy: ZC received, Sell: ZC cost) ───────
         if (!items.isEmpty()) {
             TradeItem ti = items.get(selectedIdx);
-            int previewY = y0 + H - 12;
-            int previewX = x0 + 10;
+            String preview;
             if (buyMode) {
-                int avail = availableInInventory(selectedIdx);
-                int actual = Math.min(amount, avail);
-                int gain = actual * ti.buyRate();
-                String preview = actual + " " + ti.displayName() + " → +" + gain + " ZC";
-                ctx.drawTextWithShadow(textRenderer, preview, previewX, previewY,
-                        avail > 0 ? C_GREEN : C_RED);
+                int actual = Math.min(amount, availableInInventory(selectedIdx));
+                int zcReceived = actual * ti.buyRate();
+                preview = "→ " + zcReceived + " ZC";
             } else {
                 int cost = amount * ti.sellRate();
-                int itemsOut = amount * ti.itemsPerUnit();
-                boolean canAfford = cost <= bankBalance;
-                String preview = cost + " ZC → " + itemsOut + " " + ti.displayName();
-                ctx.drawTextWithShadow(textRenderer, preview, previewX, previewY,
-                        canAfford ? C_GREEN : C_RED);
+                preview = "= " + cost + " ZC";
             }
+            int pw = textRenderer.getWidth(preview);
+            ctx.drawTextWithShadow(textRenderer, preview, x0 + W - 8 - pw, y0 + H - 24, C_GREEN);
         }
 
         super.render(ctx, mouseX, mouseY, delta);
@@ -273,6 +286,12 @@ public class TradeScreen extends Screen {
         ctx.fill(x, y+h-t, x+w, y+h, color);
         ctx.fill(x, y, x+t, y+h, color);
         ctx.fill(x+w-t, y, x+w, y+h, color);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (framesOpen < 5) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override

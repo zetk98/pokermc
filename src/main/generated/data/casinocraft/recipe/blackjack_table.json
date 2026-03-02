@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "R": {
+      "item": "minecraft:pink_wool"
+    },
+    "W": {
+      "item": "minecraft:oak_planks"
+    }
+  },
+  "pattern": [
+    "RRR",
+    "R R",
+    "W W"
+  ],
+  "result": {
+    "count": 1,
+    "id": "casinocraft:blackjack_table"
+  }
+}
