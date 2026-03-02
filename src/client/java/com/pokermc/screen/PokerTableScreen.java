@@ -75,6 +75,7 @@ public class PokerTableScreen extends Screen {
     private final List<PlayerInfo> players     = new ArrayList<>();
     private final List<String> pendingPlayers  = new ArrayList<>();
     private String myName = "";
+    private int dealerIndex = 0;
 
     // ── Notifications ─────────────────────────────────────────────────────────
     private record Notification(String message, long expiresAt) {}
@@ -91,6 +92,20 @@ public class PokerTableScreen extends Screen {
 
     // ── Cached geometry ───────────────────────────────────────────────────────
     private int tableTx, tableTy, tableW, tableH;
+
+    // ── Card animations ───────────────────────────────────────────────────────
+    private final Map<String, Long> flipStartTimes = new HashMap<>();
+    private record DealAnim(String key, String cardCode, float fromX, float fromY, float toX, float toY,
+                            long startTime, int cardW, int cardH, boolean isHero) {}
+    private record DiscardAnim(String key, float fromX, float fromY, float toX, float toY,
+                              long startTime, int cardW, int cardH, boolean isHero) {}
+    private final List<DealAnim> dealAnims = new ArrayList<>();
+    private final List<DiscardAnim> discardAnims = new ArrayList<>();
+    private List<String> prevCommunityCards = new ArrayList<>();
+    private List<String> prevHeroCards = new ArrayList<>();
+    private final Set<Integer> prevFoldedPlayers = new HashSet<>();
+    /** Client-side: hero clicked Fold but server hasn't confirmed yet. */
+    private final Set<Integer> optimisticFoldedPlayers = new HashSet<>();
 
     public PokerTableScreen(BlockPos pos, String initialJson) {
         super(Text.literal("Poker Table"));
@@ -128,7 +143,10 @@ public class PokerTableScreen extends Screen {
         int btnY = cy + 100, btnH = 18;
 
         btnFold  = addDrawableChild(ButtonWidget.builder(Text.literal("Fold"),
-                b -> sendAction("FOLD", 0))
+                b -> {
+                    startFoldDiscardForHero();
+                    sendAction("FOLD", 0);
+                })
                 .dimensions(cx - 130, btnY, 40, btnH).build());
 
         btnCheck = addDrawableChild(ButtonWidget.builder(Text.literal("Check"),
@@ -168,7 +186,7 @@ public class PokerTableScreen extends Screen {
 
     private void updateButtonVisibility() {
         if (btnLeave == null) return;
-        boolean inGame   = !phase.equals("WAITING") && !phase.equals("SHOWDOWN");
+        boolean inGame   = !phase.equals("WAITING") && !phase.equals("SHOWDOWN") && !phase.equals("DEALING");
         boolean isMyTurn = myName.equals(currentPlayerName) && inGame;
         boolean amActive = players.stream().anyMatch(p -> p.name.equals(myName));
         boolean amPending= pendingPlayers.contains(myName);
@@ -233,6 +251,7 @@ public class PokerTableScreen extends Screen {
             lastPotWon         = obj.has("lastPotWon") ? obj.get("lastPotWon").getAsInt() : 0;
             ownerName          = obj.has("owner")       ? obj.get("owner").getAsString()    : "";
             betLevel           = obj.has("betLevel")    ? obj.get("betLevel").getAsInt()     : 10;
+            dealerIndex        = obj.has("dealerIndex") ? obj.get("dealerIndex").getAsInt()  : 0;
             bankBalance        = obj.has("bankBalance") ? obj.get("bankBalance").getAsInt()  : 0;
             turnTimeRemaining  = obj.has("turnTimeRemaining") ? obj.get("turnTimeRemaining").getAsInt() : 0;
             if (turnTimeRemaining > 0 && currentPlayerName.equals(myName)) turnTimeReceivedAt = System.currentTimeMillis();
@@ -254,10 +273,16 @@ public class PokerTableScreen extends Screen {
                         case "FLOP" -> 3; case "TURN" -> 4; case "RIVER" -> 5;
                         default -> 0;
                     };
-                    for (int i = 0; i < numAlreadyShown; i++) revealedCommunityIndices.add(i);
+                    long now = System.currentTimeMillis();
+                    for (int i = 0; i < numAlreadyShown; i++) {
+                        revealedCommunityIndices.add(i);
+                        flipStartTimes.put("community-" + i, now + i * 60);
+                    }
                 }
                 prevPhase = phase;
-                if (phase.equals("WAITING") || phase.equals("PRE_FLOP")) revealedHeroCards.clear();
+                if (phase.equals("WAITING") || phase.equals("PRE_FLOP") || phase.equals("DEALING")) {
+                    revealedHeroCards.clear();
+                }
             }
 
             communityCards.clear();
@@ -274,6 +299,118 @@ public class PokerTableScreen extends Screen {
                         pname, p.get("chips").getAsInt(),
                         p.get("currentBet").getAsInt(), p.get("folded").getAsBoolean(),
                         p.get("allIn").getAsBoolean(), cards));
+            }
+
+            // Detect new cards and start deal animations
+            int cx = width / 2, cy = height / 2;
+            int tw = Math.min(width - 20, 360), th = Math.min(height - 20, 230);
+            int ttx = cx - tw / 2, tty = cy - th / 2;
+            float deckX = cx - CARD_W / 2f;
+            float deckY = tty + th / 2f - 18 - CARD_H / 2f;
+
+            for (int i = prevCommunityCards.size(); i < communityCards.size(); i++) {
+                int slotY = tty + th / 2 - 18;
+                int totalW = 5 * (CARD_W + 3) - 3;
+                int toX = cx - totalW / 2 + i * (CARD_W + 3);
+                int toY = slotY;
+                dealAnims.add(new DealAnim("community-" + i, communityCards.get(i),
+                        deckX, deckY, toX, toY, System.currentTimeMillis() + i * 80, CARD_W, CARD_H, false));
+            }
+            prevCommunityCards = new ArrayList<>(communityCards);
+
+            PlayerInfo hero = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
+            if (hero != null) {
+                int heroIdx = players.indexOf(hero);
+                List<Seat> seats = buildSeatsForGeometry(ttx, tty, tw, th);
+                if (heroIdx < seats.size()) {
+                    Seat s = seats.get(heroIdx);
+                    int totalW = hero.holeCards.size() * (CARD_W + 3) - 3;
+                    int cx2, cy2;
+                    if (s.cardDir() == 2) {
+                        cx2 = s.x() - totalW / 2;
+                        cy2 = s.y() - 7 - 3 - CARD_H;
+                    } else if (s.cardDir() == 0) {
+                        cx2 = s.x() - totalW / 2;
+                        cy2 = s.y() + 7 + 28;
+                    } else if (s.cardDir() == +1) {
+                        cx2 = s.x() + 10;
+                        cy2 = s.y() - CARD_H / 2;
+                    } else {
+                        cx2 = s.x() - 10 - totalW;
+                        cy2 = s.y() - CARD_H / 2;
+                    }
+                    for (int i = prevHeroCards.size(); i < hero.holeCards.size(); i++) {
+                        int toX = cx2 + i * (CARD_W + 3);
+                        int toY = cy2;
+                        dealAnims.add(new DealAnim("hero-" + i, hero.holeCards.get(i),
+                                deckX, deckY, toX, toY, System.currentTimeMillis() + i * 100, CARD_W, CARD_H, true));
+                    }
+                }
+                prevHeroCards = new ArrayList<>(hero.holeCards);
+            } else {
+                prevHeroCards.clear();
+            }
+
+            if (phase.equals("WAITING")) {
+                flipStartTimes.clear();
+                dealAnims.clear();
+                discardAnims.clear();
+                prevFoldedPlayers.clear();
+                optimisticFoldedPlayers.clear();
+            }
+
+            // Detect fold: start discard animation (cards fly to dealer)
+            List<Seat> seats = buildSeatsForGeometry(ttx, tty, tw, th);
+
+            for (int i = 0; i < players.size(); i++) {
+                PlayerInfo p = players.get(i);
+                if (p.folded && !prevFoldedPlayers.contains(i)) {
+                    if (i < seats.size()) {
+                        Seat s = seats.get(i);
+                        int headSz = 14;
+                        int num = p.holeCards.isEmpty() ? 2 : p.holeCards.size();
+                        int totalW = (p.name.equals(myName) ? num * (CARD_W + 3) : num * (SMALL_W + 1)) - (p.name.equals(myName) ? 3 : 1);
+                        int cw = p.name.equals(myName) ? CARD_W : SMALL_W;
+                        int ch = p.name.equals(myName) ? CARD_H : SMALL_H;
+                        int cx2, cy2;
+                        if (s.cardDir() == 2) {
+                            cx2 = s.x() - totalW / 2;
+                            cy2 = s.y() - headSz / 2 - (p.name.equals(myName) ? 3 : 2) - ch;
+                        } else if (s.cardDir() == 0) {
+                            cx2 = s.x() - totalW / 2;
+                            cy2 = s.y() + headSz / 2 + (p.name.equals(myName) ? 28 : 26);
+                        } else if (s.cardDir() == +1) {
+                            cx2 = s.x() + headSz / 2 + 3;
+                            cy2 = s.y() - ch / 2;
+                        } else {
+                            cx2 = s.x() - headSz / 2 - 3 - totalW;
+                            cy2 = s.y() - ch / 2;
+                        }
+                        long now = System.currentTimeMillis();
+                        for (int j = 0; j < num; j++) {
+                            float fromX = cx2 + j * (p.name.equals(myName) ? (CARD_W + 3) : (SMALL_W + 1));
+                            float fromY = cy2;
+                            discardAnims.add(new DiscardAnim("discard-" + i + "-" + j,
+                                    fromX, fromY, deckX, deckY, now + j * 80, cw, ch, p.name.equals(myName)));
+                        }
+                    }
+                    prevFoldedPlayers.add(i);
+                }
+            }
+            // Clear optimistic fold when server confirms
+            for (int i = 0; i < players.size(); i++) {
+                if (players.get(i).folded) optimisticFoldedPlayers.remove(i);
+            }
+
+            if (phaseChanged && phase.equals("SHOWDOWN")) {
+                long now = System.currentTimeMillis();
+                PlayerInfo heroP = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
+                if (heroP != null && !heroP.holeCards.isEmpty()) {
+                    for (int i = 0; i < heroP.holeCards.size(); i++) {
+                        revealedHeroCards.add(i);
+                        flipStartTimes.put("hero-" + i, now + 100 + i * 80);
+                    }
+                }
             }
 
             pendingPlayers.clear();
@@ -313,7 +450,7 @@ public class PokerTableScreen extends Screen {
 
         // Phase + pot
         String phaseLabel = switch (phase) {
-            case "PRE_FLOP" -> "Pre-Flop"; case "FLOP"  -> "Flop";
+            case "DEALING" -> "Dealing..."; case "PRE_FLOP" -> "Pre-Flop"; case "FLOP"  -> "Flop";
             case "TURN"     -> "Turn";     case "RIVER" -> "River";
             case "SHOWDOWN" -> "Showdown"; default      -> "Waiting";
         };
@@ -336,8 +473,11 @@ public class PokerTableScreen extends Screen {
         // ── 8 seats on oval ───────────────────────────────────────────────────
         renderAllSeats(ctx, tx, ty);
 
+        // ── Flying discard cards (fold animation) ─────────────────────────────
+        renderDiscardAnims(ctx);
+
         // ── Turn indicator ────────────────────────────────────────────────────
-        if (!currentPlayerName.isEmpty() && !phase.equals("WAITING") && !phase.equals("SHOWDOWN")) {
+        if (!currentPlayerName.isEmpty() && !phase.equals("WAITING") && !phase.equals("SHOWDOWN") && !phase.equals("DEALING")) {
             boolean myTurn = currentPlayerName.equals(myName);
             String txt = myTurn ? "▶ YOUR TURN ◀" : currentPlayerName + "'s turn";
             if (myTurn && turnTimeRemaining > 0) {
@@ -372,12 +512,15 @@ public class PokerTableScreen extends Screen {
     private record Seat(int x, int y, int cardDir) {}
 
     private List<Seat> buildSeats(int tx, int ty) {
-        List<Seat> result = new ArrayList<>(8);
-        int tcx = tx + tableW / 2;
-        int tcy = ty + tableH / 2;
-        double rx = tableW / 2.0 - 22;   // matches visual oval radii
-        double ry = tableH / 2.0 - 38;   // 75px for 230px tall table
+        return buildSeatsForGeometry(tx, ty, tableW, tableH);
+    }
 
+    private List<Seat> buildSeatsForGeometry(int tx, int ty, int tw, int th) {
+        List<Seat> result = new ArrayList<>(8);
+        int tcx = tx + tw / 2;
+        int tcy = ty + th / 2;
+        double rx = tw / 2.0 - 22;
+        double ry = th / 2.0 - 38;
         for (int i = 0; i < 8; i++) {
             double rad = Math.toRadians(SEAT_ANGLES[i]);
             int sx = tcx + (int)(Math.cos(rad) * rx);
@@ -400,11 +543,11 @@ public class PokerTableScreen extends Screen {
             if (s < players.size()) {
                 PlayerInfo p = players.get(s);
                 boolean isHero = p.name.equals(myName);
-                drawSeat(ctx, seat.x(), seat.y(), seat.cardDir(), p, null, isHero);
+                drawSeat(ctx, seat.x(), seat.y(), seat.cardDir(), p, null, isHero, s);
             } else {
                 int pi = s - players.size();
                 String pendName = pi < pendingPlayers.size() ? pendingPlayers.get(pi) : null;
-                drawSeat(ctx, seat.x(), seat.y(), seat.cardDir(), null, pendName, false);
+                drawSeat(ctx, seat.x(), seat.y(), seat.cardDir(), null, pendName, false, -1);
             }
         }
     }
@@ -414,10 +557,11 @@ public class PokerTableScreen extends Screen {
      * @param pi     PlayerInfo (null if empty or pending)
      * @param pendName  name if pending (null if empty)
      * @param isHero true = local player; shows full-size cards face-up
+     * @param playerIndex seat/player index (for fold discard anim; -1 if pending)
      * @param cardDir +1=right, -1=left, 0=below head, 2=above head
      */
     private void drawSeat(DrawContext ctx, int sx, int sy,
-                          int cardDir, PlayerInfo pi, String pendName, boolean isHero) {
+                          int cardDir, PlayerInfo pi, String pendName, boolean isHero, int playerIndex) {
         int headSz = 14;
 
         // Empty slot
@@ -431,6 +575,7 @@ public class PokerTableScreen extends Screen {
         boolean isPending = (pi == null);
         String name = isPending ? pendName : pi.name;
         boolean isTurn = !isPending && name.equals(currentPlayerName);
+        boolean isFolded = !isPending && (pi.folded || optimisticFoldedPlayers.contains(playerIndex));
 
         // Head
         int hx = sx - headSz / 2, hy = sy - headSz / 2;
@@ -438,15 +583,17 @@ public class PokerTableScreen extends Screen {
 
         if (isTurn) drawBorder(ctx, hx - 1, hy - 1, headSz + 2, headSz + 2, C_RED_SLOT, 1);
 
-        // Crown above head (owner)
+        // Crown (owner) và Dealer (D) phía trên head
         if (!isPending && name.equals(ownerName))
-            ctx.drawCenteredTextWithShadow(textRenderer, "♛", sx, hy - 9, C_GOLD);
+            ctx.drawCenteredTextWithShadow(textRenderer, "♛", sx - 5, hy - 9, C_GOLD);
+        if (!isPending && playerIndex >= 0 && playerIndex == dealerIndex && dealerIndex < players.size() && !phase.equals("WAITING"))
+            ctx.drawCenteredTextWithShadow(textRenderer, "D", sx + 5, hy - 9, 0xFF00DDFF);
 
-        // Name below head
+        // Name below head (don't gray out when folded; cards fly to dealer instead)
         int nameY = sy + headSz / 2 + 2;
-        int nc = isPending ? C_PENDING : (isTurn ? C_HIGHLIGHT : (pi.folded ? C_GRAY : C_WHITE));
+        int nc = isPending ? C_PENDING : (isTurn ? C_HIGHLIGHT : C_WHITE);
         String rawLabel = isPending ? name + " ★"
-                : (pi.folded ? name + " F" : (pi.allIn ? name + " A" : name));
+                : (isFolded ? name + " F" : (pi.allIn ? name + " A" : name));
         String label = textRenderer.getWidth(rawLabel) > 46 ? rawLabel.substring(0, 5) + ".." : rawLabel;
         ctx.drawCenteredTextWithShadow(textRenderer, label, sx, nameY, nc);
 
@@ -460,11 +607,67 @@ public class PokerTableScreen extends Screen {
             ctx.drawCenteredTextWithShadow(textRenderer, "next round", sx, nameY + 9, C_PENDING);
         }
 
-        // Cards
-        if (!isPending && !pi.holeCards.isEmpty()) {
+        // Cards: flying discard anim takes priority, then folded (or optimistic) empty slots, else normal cards
+        if (!isPending && hasActiveDiscardForPlayer(playerIndex)) {
+            // Cards flying to dealer; don't draw at seat
+        } else if (!isPending && isFolded) {
+            drawFoldedEmptySlots(ctx, sx, sy, headSz, cardDir, isHero);
+        } else if (!isPending && !pi.holeCards.isEmpty()) {
             drawSeatCards(ctx, sx, sy, headSz, pi.holeCards, cardDir, isHero);
             if (isHero) cacheHeroCardBounds(sx, sy, headSz, pi.holeCards.size(), cardDir);
         }
+    }
+
+    private boolean hasActiveDiscardForPlayer(int playerIndex) {
+        if (playerIndex < 0) return false;
+        String prefix = "discard-" + playerIndex + "-";
+        return discardAnims.stream().anyMatch(d -> d.key().startsWith(prefix));
+    }
+
+    private void drawFoldedEmptySlots(DrawContext ctx, int sx, int sy, int headSz, int cardDir, boolean isHero) {
+        int num = 2;
+        int cw = isHero ? CARD_W : SMALL_W;
+        int ch = isHero ? CARD_H : SMALL_H;
+        int gap = isHero ? 3 : 1;
+        int totalW = num * (cw + gap) - gap;
+        int cx2, cy2;
+        if (cardDir == 2) {
+            cx2 = sx - totalW / 2;
+            cy2 = sy - headSz / 2 - (isHero ? 3 : 2) - ch;
+        } else if (cardDir == 0) {
+            cx2 = sx - totalW / 2;
+            cy2 = sy + headSz / 2 + (isHero ? 28 : 26);
+        } else if (cardDir == +1) {
+            cx2 = sx + headSz / 2 + 3;
+            cy2 = sy - ch / 2;
+        } else {
+            cx2 = sx - headSz / 2 - 3 - totalW;
+            cy2 = sy - ch / 2;
+        }
+        for (int j = 0; j < num; j++) {
+            int bx = cx2 + j * (cw + gap);
+            drawEmptyCardSlot(ctx, bx, cy2, cw, ch);
+        }
+    }
+
+    private void renderDiscardAnims(DrawContext ctx) {
+        var toRemove = new ArrayList<DiscardAnim>();
+        for (DiscardAnim d : discardAnims) {
+            float prog = CardAnimationHelper.getDiscardProgress(d.startTime());
+            if (prog >= 1f) {
+                toRemove.add(d);
+            } else {
+                float t = CardAnimationHelper.easeOutQuad(prog);
+                float drawX = CardAnimationHelper.lerpEased(d.fromX(), d.toX(), t, true);
+                float drawY = CardAnimationHelper.lerpEased(d.fromY(), d.toY(), t, true);
+                if (d.isHero()) {
+                    drawCardBack(ctx, (int) drawX, (int) drawY);
+                } else {
+                    drawCardBackSmall(ctx, (int) drawX, (int) drawY);
+                }
+            }
+        }
+        discardAnims.removeAll(toRemove);
     }
 
     private void cacheHeroCardBounds(int sx, int sy, int headSz, int num, int cardDir) {
@@ -511,9 +714,40 @@ public class PokerTableScreen extends Screen {
             }
             for (int j = 0; j < num; j++) {
                 int bx = cx2 + j * (CARD_W + 3), by = cy2;
+                final int cardIdx = j;
+                DealAnim deal = dealAnims.stream().filter(d -> d.key().equals("hero-" + cardIdx)).findFirst().orElse(null);
+                if (deal != null) {
+                    float prog = CardAnimationHelper.getDealProgress(deal.startTime());
+                    if (prog >= 1f) {
+                        dealAnims.remove(deal);
+                    } else {
+                        float t = CardAnimationHelper.easeOutQuad(prog);
+                        float drawX = CardAnimationHelper.lerpEased(deal.fromX(), deal.toX(), t, true);
+                        float drawY = CardAnimationHelper.lerpEased(deal.fromY(), deal.toY(), t, true);
+                        drawCardBack(ctx, (int) drawX, (int) drawY);
+                        continue;
+                    }
+                }
+
                 boolean revealed = revealedHeroCards.contains(j) || phase.equals("SHOWDOWN");
-                if (revealed) drawCard(ctx, bx, by, holeCards.get(j));
-                else drawCardBack(ctx, bx, by);
+                Long flipStart = flipStartTimes.get("hero-" + j);
+                if (revealed && flipStart != null) {
+                    float prog = CardAnimationHelper.getFlipProgress(flipStart);
+                    if (prog >= 1f) {
+                        flipStartTimes.remove("hero-" + j);
+                        drawCard(ctx, bx, by, holeCards.get(j));
+                    } else {
+                        int[] uv = atlasUV(holeCards.get(j));
+                        if (uv != null) {
+                            CardAnimationHelper.drawCardWithFlip(ctx, bx, by, CARD_W, CARD_H,
+                                    TEX_CARD_BACK, TEX_CARD_ATLAS, uv[0], uv[1], ATLAS_W, ATLAS_H, CARD_W, CARD_H, prog);
+                        }
+                    }
+                } else if (revealed) {
+                    drawCard(ctx, bx, by, holeCards.get(j));
+                } else {
+                    drawCardBack(ctx, bx, by);
+                }
             }
         } else {
             // Small cards for opponents
@@ -546,17 +780,58 @@ public class PokerTableScreen extends Screen {
         int totalW = 5 * (CARD_W + 3) - 3;
         int startX = cx - totalW / 2;
         communityCardBounds.clear();
+
         for (int i = 0; i < 5; i++) {
             int sx = startX + i * (CARD_W + 3);
-            boolean revealed = revealedCommunityIndices.contains(i) || !phase.equals("SHOWDOWN");
-            if (i < communityCards.size()) {
-                if (revealed) drawCard(ctx, sx, slotY, communityCards.get(i));
-                else drawCardBack(ctx, sx, slotY);
-            } else {
-                drawCardBack(ctx, sx, slotY);
-            }
             communityCardBounds.add(new int[]{sx - 1, slotY - 1, CARD_W + 2, CARD_H + 2});
+            final int slotIdx = i;
+            DealAnim deal = dealAnims.stream().filter(d -> d.key().equals("community-" + slotIdx)).findFirst().orElse(null);
+            if (deal != null) {
+                float prog = CardAnimationHelper.getDealProgress(deal.startTime());
+                if (prog >= 1f) {
+                    dealAnims.remove(deal);
+                } else {
+                    float t = CardAnimationHelper.easeOutQuad(prog);
+                    float drawX = CardAnimationHelper.lerpEased(deal.fromX(), deal.toX(), t, true);
+                    float drawY = CardAnimationHelper.lerpEased(deal.fromY(), deal.toY(), t, true);
+                    drawCardBack(ctx, (int) drawX, (int) drawY);
+                    continue;
+                }
+            }
+
+            boolean revealed = revealedCommunityIndices.contains(slotIdx) || !phase.equals("SHOWDOWN");
+            if (slotIdx < communityCards.size()) {
+                Long flipStart = flipStartTimes.get("community-" + slotIdx);
+                if (revealed && flipStart != null) {
+                    float prog = CardAnimationHelper.getFlipProgress(flipStart);
+                    if (prog >= 1f) {
+                        flipStartTimes.remove("community-" + slotIdx);
+                        drawCard(ctx, sx, slotY, communityCards.get(slotIdx));
+                    } else {
+                        int[] uv = atlasUV(communityCards.get(slotIdx));
+                        if (uv != null) {
+                            CardAnimationHelper.drawCardWithFlip(ctx, sx, slotY, CARD_W, CARD_H,
+                                    TEX_CARD_BACK, TEX_CARD_ATLAS, uv[0], uv[1], ATLAS_W, ATLAS_H, CARD_W, CARD_H, prog);
+                        }
+                    }
+                } else if (revealed) {
+                    drawCard(ctx, sx, slotY, communityCards.get(slotIdx));
+                } else {
+                    drawCardBack(ctx, sx, slotY);
+                }
+            } else {
+                drawEmptyCardSlot(ctx, sx, slotY);
+            }
         }
+    }
+
+    /** Empty slot frame — no card, just border where card will appear */
+    private void drawEmptyCardSlot(DrawContext ctx, int x, int y) {
+        drawEmptyCardSlot(ctx, x, y, CARD_W, CARD_H);
+    }
+    private void drawEmptyCardSlot(DrawContext ctx, int x, int y, int w, int h) {
+        ctx.fill(x, y, x + w, y + h, 0x22000000);
+        drawBorder(ctx, x, y, w, h, C_GRAY, 1);
     }
 
     // ── Best hand ─────────────────────────────────────────────────────────────
@@ -670,6 +945,46 @@ public class PokerTableScreen extends Screen {
         ctx.fill(x + w - t, y,         x + w,     y + h,     color);
     }
 
+    /** Client-side prediction: start fold discard animation immediately when hero clicks Fold. */
+    private void startFoldDiscardForHero() {
+        PlayerInfo hero = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
+        if (hero == null || hero.folded) return;
+        int heroIdx = players.indexOf(hero);
+        int tw = Math.min(width - 20, 360), th = Math.min(height - 20, 230);
+        int ttx = width / 2 - tw / 2, tty = height / 2 - th / 2;
+        float deckX = width / 2f - CARD_W / 2f;
+        float deckY = tty + th / 2f - 18 - CARD_H / 2f;
+        List<Seat> seats = buildSeatsForGeometry(ttx, tty, tw, th);
+        if (heroIdx >= seats.size()) return;
+        Seat s = seats.get(heroIdx);
+        int headSz = 14;
+        int num = hero.holeCards.isEmpty() ? 2 : hero.holeCards.size();
+        int totalW = num * (CARD_W + 3) - 3;
+        int cx2, cy2;
+        if (s.cardDir() == 2) {
+            cx2 = s.x() - totalW / 2;
+            cy2 = s.y() - headSz / 2 - 3 - CARD_H;
+        } else if (s.cardDir() == 0) {
+            cx2 = s.x() - totalW / 2;
+            cy2 = s.y() + headSz / 2 + 28;
+        } else if (s.cardDir() == +1) {
+            cx2 = s.x() + headSz / 2 + 3;
+            cy2 = s.y() - CARD_H / 2;
+        } else {
+            cx2 = s.x() - headSz / 2 - 3 - totalW;
+            cy2 = s.y() - CARD_H / 2;
+        }
+        long now = System.currentTimeMillis();
+        for (int j = 0; j < num; j++) {
+            float fromX = cx2 + j * (CARD_W + 3);
+            float fromY = cy2;
+            discardAnims.add(new DiscardAnim("discard-" + heroIdx + "-" + j,
+                    fromX, fromY, deckX, deckY, now + j * 80, CARD_W, CARD_H, true));
+        }
+        prevFoldedPlayers.add(heroIdx);
+        optimisticFoldedPlayers.add(heroIdx);
+    }
+
     private void sendAction(String action, int amount) {
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
                 new PokerNetworking.PlayerActionPayload(tablePos, action, amount, ""));
@@ -682,14 +997,20 @@ public class PokerTableScreen extends Screen {
             for (int j = 0; j < heroCardBounds.size(); j++) {
                 int[] b = heroCardBounds.get(j);
                 if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
+                    if (!revealedHeroCards.contains(j)) {
+                        flipStartTimes.put("hero-" + j, System.currentTimeMillis());
+                    }
                     revealedHeroCards.add(j);
                     return true;
                 }
             }
             if (phase.equals("SHOWDOWN")) {
-                for (int i = 0; i < communityCardBounds.size(); i++) {
+                for (int i = 0; i < communityCardBounds.size() && i < communityCards.size(); i++) {
                     int[] b = communityCardBounds.get(i);
                     if (mouseX >= b[0] && mouseX < b[0] + b[2] && mouseY >= b[1] && mouseY < b[1] + b[3]) {
+                        if (!revealedCommunityIndices.contains(i)) {
+                            flipStartTimes.put("community-" + i, System.currentTimeMillis());
+                        }
                         revealedCommunityIndices.add(i);
                         return true;
                     }

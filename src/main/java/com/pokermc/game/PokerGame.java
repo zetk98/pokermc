@@ -12,7 +12,7 @@ import java.util.Collections;
  */
 public class PokerGame {
 
-    public enum Phase { WAITING, PRE_FLOP, FLOP, TURN, RIVER, SHOWDOWN }
+    public enum Phase { WAITING, DEALING, PRE_FLOP, FLOP, TURN, RIVER, SHOWDOWN }
     public enum Action { FOLD, CHECK, CALL, RAISE, ALLIN }
 
     public static class PlayerState {
@@ -47,6 +47,10 @@ public class PokerGame {
     private int lastPotWon = 0;
     private String statusMessage = "Waiting for players...";
     private long turnStartTick = 0;
+
+    /** DEALING phase: deal one card per tick. dealCardIndex 0..2*n-1. */
+    private int dealCardIndex = 0;
+    public static final int DEAL_TICKS_PER_CARD = 12;
 
     // Blinds from config - no room level, free bet
     private int smallBlind() { return Math.max(1, PokerConfig.get().smallBlindAmount); }
@@ -190,13 +194,39 @@ public class PokerGame {
             p.hasActed = false;
         }
 
-        // Deal 2 cards each
-        for (int round = 0; round < 2; round++) {
-            for (PlayerState p : players) {
-                p.holeCards.add(deck.deal());
-            }
-        }
+        dealCardIndex = 0;
+        dealerIndex = 0; // Ván đầu: dealer = chủ phòng (room owner)
+        phase = Phase.DEALING;
+        statusMessage = "Dealing cards...";
+        return true;
+    }
 
+    /**
+     * Deal one card at a time. Dealer nhận bài đầu tiên, rồi theo chiều kim đồng hồ.
+     * Called from BlockEntity tick when phase == DEALING.
+     * @return true if a card was dealt, false if dealing is complete
+     */
+    public boolean dealOneCard() {
+        if (phase != Phase.DEALING || players.isEmpty()) return false;
+        int n = players.size();
+        int totalCards = 2 * n;
+        if (dealCardIndex >= totalCards) {
+            finishDealing();
+            return false;
+        }
+        // Dealer nhận bài đầu tiên, rồi (dealer+1), (dealer+2)... theo chiều kim đồng hồ
+        int targetIdx = (dealerIndex + (dealCardIndex % n)) % n;
+        players.get(targetIdx).holeCards.add(deck.deal());
+        dealCardIndex++;
+        if (dealCardIndex >= totalCards) {
+            finishDealing();
+        } else {
+            statusMessage = "Dealing cards...";
+        }
+        return true;
+    }
+
+    private void finishDealing() {
         phase = Phase.PRE_FLOP;
 
         int sbIdx = (dealerIndex + 1) % players.size();
@@ -212,9 +242,10 @@ public class PokerGame {
             currentPlayerIndex = dealerIndex;
         }
 
-        statusMessage = "Game started! Pre-flop. " + currentPlayer().name + "'s turn.";
-        return true;
+        statusMessage = "Pre-flop. " + currentPlayer().name + "'s turn.";
     }
+
+    public int getDealCardIndex() { return dealCardIndex; }
 
     private void postBlind(int idx, int amount) {
         PlayerState p = players.get(idx);
@@ -403,6 +434,7 @@ public class PokerGame {
                 lastWinner = winner.name;
                 lastWinningHand = "Last player standing";
                 statusMessage = winner.name + " wins " + pot + " ZC! (everyone else folded)";
+                dealerIndex = players.indexOf(winner); // Ván sau: dealer = người thắng, sang phải
             }
         } else {
             // Showdown - evaluate hands, handle ties (split pot evenly)
@@ -436,13 +468,16 @@ public class PokerGame {
                 lastWinner = String.join(" & ", winners.stream().map(p -> p.name).toList());
                 lastWinningHand = bestHand != null ? bestHand.getDisplayName() : "";
                 statusMessage = lastWinner + (winners.size() > 1 ? " split " : " wins ") + pot + " ZC with " + lastWinningHand + "!";
+                // Huề: random 1 người trong số người thắng làm dealer
+                PlayerState nextDealer = winners.size() == 1 ? winners.get(0)
+                        : winners.get(new Random().nextInt(winners.size()));
+                dealerIndex = players.indexOf(nextDealer);
             }
         }
 
         pot = 0;
         phase = Phase.SHOWDOWN;
         currentPlayerIndex = -1;
-        dealerIndex = (dealerIndex + 1) % players.size();
     }
 
     public void resetToWaiting(net.minecraft.server.MinecraftServer server) {
@@ -499,6 +534,7 @@ public class PokerGame {
     public PlayerState getPlayer(String name) {
         return players.stream().filter(p -> p.name.equals(name)).findFirst().orElse(null);
     }
+    public int getDealerIndex() { return dealerIndex; }
     public void setTurnStartTick(long tick) { this.turnStartTick = tick; }
     public long getTurnStartTick() { return turnStartTick; }
 }

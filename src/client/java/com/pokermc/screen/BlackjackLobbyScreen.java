@@ -44,6 +44,9 @@ public class BlackjackLobbyScreen extends Screen {
         parseState(stateJson);
     }
 
+    /** Blackjack tạm gác — hiển thị "Đang phát triển" khi người chơi nhấn vào. */
+    private static final boolean WIP_MODE = true;
+
     @Override
     protected void init() {
         int cx = width / 2, cy = height / 2;
@@ -51,6 +54,13 @@ public class BlackjackLobbyScreen extends Screen {
 
         addDrawableChild(ButtonWidget.builder(Text.literal("✕"), b -> close())
                 .dimensions(bgX + BG_W - 20, bgY + 4, 16, 14).build());
+
+        if (WIP_MODE) {
+            addDrawableChild(ButtonWidget.builder(Text.literal("Đóng"),
+                    b -> close())
+                    .dimensions(cx - 50, bgY + BG_H - 40, 100, 20).build());
+            return;
+        }
 
         int btnW = 120, btnH = 24;
         int btnX = bgX + (BG_W - btnW) / 2;
@@ -162,7 +172,10 @@ public class BlackjackLobbyScreen extends Screen {
 
         ctx.drawCenteredTextWithShadow(textRenderer, "BLACKJACK", cx, bgY + 18, C_PINK);
 
-        if (isEmpty) {
+        if (WIP_MODE) {
+            ctx.drawCenteredTextWithShadow(textRenderer, "Đang phát triển", cx, bgY + 55, C_GOLD);
+            ctx.drawCenteredTextWithShadow(textRenderer, "Coming soon...", cx, bgY + 70, C_GRAY);
+        } else if (isEmpty) {
             ctx.drawCenteredTextWithShadow(textRenderer, "Empty — Create room to start", cx, bgY + 38, C_GRAY);
         } else {
             String bb = maxBet >= 1000 ? (maxBet/1000) + "K" : String.valueOf(maxBet);

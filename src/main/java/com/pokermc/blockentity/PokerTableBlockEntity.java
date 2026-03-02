@@ -71,6 +71,7 @@ public class PokerTableBlockEntity extends BlockEntity {
     private static final double MAX_DISTANCE = 5.5;
     private String lastTimedPlayer = "";
     private int tickCounter = 0;
+    private int dealTickCounter = 0;
 
     // ── Tick ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,19 @@ public class PokerTableBlockEntity extends BlockEntity {
         be.viewers.removeIf(p -> !p.isAlive() || p.isDisconnected());
 
         PokerGame game = be.getGame();
+
+        // DEALING phase: deal one card every DEAL_TICKS_PER_CARD ticks
+        if (game.getPhase() == PokerGame.Phase.DEALING) {
+            be.dealTickCounter++;
+            if (be.dealTickCounter >= PokerGame.DEAL_TICKS_PER_CARD) {
+                be.dealTickCounter = 0;
+                if (game.dealOneCard()) {
+                    be.markDirty();
+                    PokerNetworking.broadcastState(be);
+                }
+            }
+            return;
+        }
 
         int turnSec = com.pokermc.config.PokerConfig.get().turnTimeSeconds;
         if (turnSec > 0) {

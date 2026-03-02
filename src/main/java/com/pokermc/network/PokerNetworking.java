@@ -84,6 +84,7 @@ public class PokerNetworking {
         root.addProperty("lastPotWon",      game.getLastPotWon());
         root.addProperty("status",          game.getStatusMessage());
         root.addProperty("betLevel",        game.getBetLevel());
+        root.addProperty("dealerIndex",     game.getDealerIndex());
         root.addProperty("isEmpty",         game.getPlayers().isEmpty()
                                          && game.getPendingPlayers().isEmpty());
         root.addProperty("minZcToJoin",     PokerConfig.get().minZcToJoin);
