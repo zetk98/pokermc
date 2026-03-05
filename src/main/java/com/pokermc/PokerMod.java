@@ -1,9 +1,12 @@
 package com.pokermc;
 
+import com.pokermc.block.BangTableBlock;
 import com.pokermc.block.BlackjackTableBlock;
 import com.pokermc.block.PokerTableBlock;
+import com.pokermc.blockentity.BangTableBlockEntity;
 import com.pokermc.blockentity.BlackjackTableBlockEntity;
 import com.pokermc.blockentity.PokerTableBlockEntity;
+import com.pokermc.network.BangNetworking;
 import com.pokermc.network.BlackjackNetworking;
 import com.pokermc.component.PokerComponents;
 import com.pokermc.config.PokerConfig;
@@ -48,6 +51,13 @@ public class PokerMod implements ModInitializer {
                     .nonOpaque()
     );
 
+    public static final BangTableBlock BANG_TABLE_BLOCK = new BangTableBlock(
+            AbstractBlock.Settings.create()
+                    .mapColor(MapColor.TERRACOTTA_ORANGE)
+                    .strength(2.5f)
+                    .nonOpaque()
+    );
+
     // Block items
     public static final BlockItem POKER_TABLE_ITEM = new BlockItem(
             POKER_TABLE_BLOCK,
@@ -57,10 +67,15 @@ public class PokerMod implements ModInitializer {
             BLACKJACK_TABLE_BLOCK,
             new Item.Settings()
     );
+    public static final BlockItem BANG_TABLE_ITEM = new BlockItem(
+            BANG_TABLE_BLOCK,
+            new Item.Settings()
+    );
 
     // Block entity types — initialized in onInitialize
     public static BlockEntityType<PokerTableBlockEntity> POKER_TABLE_BLOCK_ENTITY;
     public static BlockEntityType<BlackjackTableBlockEntity> BLACKJACK_TABLE_BLOCK_ENTITY;
+    public static BlockEntityType<BangTableBlockEntity> BANG_TABLE_BLOCK_ENTITY;
 
     @Override
     public void onInitialize() {
@@ -71,6 +86,8 @@ public class PokerMod implements ModInitializer {
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "poker_table"), POKER_TABLE_ITEM);
         Registry.register(Registries.BLOCK, Identifier.of(MOD_ID, "blackjack_table"), BLACKJACK_TABLE_BLOCK);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "blackjack_table"), BLACKJACK_TABLE_ITEM);
+        Registry.register(Registries.BLOCK, Identifier.of(MOD_ID, "bang_table"), BANG_TABLE_BLOCK);
+        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "bang_table"), BANG_TABLE_ITEM);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin"), ZCOIN_ITEM);
         Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin_bag"), ZCOIN_BAG_ITEM);
 
@@ -84,6 +101,11 @@ public class PokerMod implements ModInitializer {
                 Registries.BLOCK_ENTITY_TYPE,
                 Identifier.of(MOD_ID, "blackjack_table"),
                 BlockEntityType.Builder.create(BlackjackTableBlockEntity::new, BLACKJACK_TABLE_BLOCK).build()
+        );
+        BANG_TABLE_BLOCK_ENTITY = Registry.register(
+                Registries.BLOCK_ENTITY_TYPE,
+                Identifier.of(MOD_ID, "bang_table"),
+                BlockEntityType.Builder.create(BangTableBlockEntity::new, BANG_TABLE_BLOCK).build()
         );
 
         // Register S2C custom payloads
@@ -99,6 +121,12 @@ public class PokerMod implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(
                 BlackjackNetworking.BlackjackStatePayload.ID,
                 BlackjackNetworking.BlackjackStatePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                BangNetworking.OpenBangPayload.ID,
+                BangNetworking.OpenBangPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                BangNetworking.BangStatePayload.ID,
+                BangNetworking.BangStatePayload.CODEC);
 
         // Register C2S custom payloads
         PayloadTypeRegistry.playC2S().register(
@@ -107,6 +135,9 @@ public class PokerMod implements ModInitializer {
         PayloadTypeRegistry.playC2S().register(
                 BlackjackNetworking.BlackjackActionPayload.ID,
                 BlackjackNetworking.BlackjackActionPayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(
+                BangNetworking.BangActionPayload.ID,
+                BangNetworking.BangActionPayload.CODEC);
 
         // Handle incoming C2S player actions on the server
         ServerPlayNetworking.registerGlobalReceiver(
@@ -121,6 +152,12 @@ public class PokerMod implements ModInitializer {
                         () -> BlackjackNetworking.handleAction(context.player(), payload)
                 )
         );
+        ServerPlayNetworking.registerGlobalReceiver(
+                BangNetworking.BangActionPayload.ID,
+                (payload, context) -> context.server().execute(
+                        () -> BangNetworking.handleAction(context.player(), payload)
+                )
+        );
 
         // Create CasinoCraft creative tab
         Registry.register(Registries.ITEM_GROUP,
@@ -133,6 +170,7 @@ public class PokerMod implements ModInitializer {
                             entries.add(BLACKJACK_TABLE_ITEM);
                             entries.add(ZCOIN_ITEM);
                             entries.add(ZCOIN_BAG_ITEM);
+                            entries.add(BANG_TABLE_ITEM);
                         })
                         .build());
 

@@ -3,8 +3,11 @@ package com.pokermc;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.pokermc.network.BangNetworking;
 import com.pokermc.network.BlackjackNetworking;
 import com.pokermc.network.PokerNetworking;
+import com.pokermc.screen.BangLobbyScreen;
+import com.pokermc.screen.BangTableScreen;
 import com.pokermc.screen.BlackjackLobbyScreen;
 import com.pokermc.screen.BlackjackTableScreen;
 import com.pokermc.screen.PokerLobbyScreen;
@@ -55,6 +58,45 @@ public class PokerModClient implements ClientModInitializer {
                         } catch (Exception e) {
                             System.err.println("[CasinoCraft Client] Error: " + e.getMessage());
                             e.printStackTrace();
+                        }
+                    });
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                BangNetworking.OpenBangPayload.ID,
+                (payload, context) -> {
+                    context.client().execute(() -> {
+                        try {
+                            String myName = context.client().player != null
+                                    ? context.client().player.getName().getString() : "";
+                            boolean inGame = false;
+                            try {
+                                JsonObject obj = JsonParser.parseString(payload.stateJson()).getAsJsonObject();
+                                if (obj.has("players")) {
+                                    for (JsonElement e : obj.getAsJsonArray("players")) {
+                                        if (e.getAsJsonObject().get("name").getAsString().equals(myName)) {
+                                            inGame = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!inGame && obj.has("pendingPlayers")) {
+                                    for (JsonElement e : obj.getAsJsonArray("pendingPlayers")) {
+                                        if (e.getAsString().equals(myName)) { inGame = true; break; }
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                            if (inGame) {
+                                BangTableScreen ts = new BangTableScreen(payload.pos(), payload.stateJson());
+                                context.client().setScreen(ts);
+                                ts.updateState(payload.stateJson());
+                            } else {
+                                BangLobbyScreen lobby = new BangLobbyScreen(payload.pos(), payload.stateJson());
+                                context.client().setScreen(lobby);
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[CasinoCraft] Bang error: " + e.getMessage());
                         }
                     });
                 }
@@ -116,6 +158,15 @@ public class PokerModClient implements ClientModInitializer {
                     if      (s instanceof BlackjackTableScreen bts) bts.updateState(payload.stateJson());
                     else if (s instanceof BlackjackLobbyScreen bls) bls.updateState(payload.stateJson());
                     else if (s instanceof TradeScreen ts) ts.updateState(payload.stateJson());
+                })
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                BangNetworking.BangStatePayload.ID,
+                (payload, context) -> context.client().execute(() -> {
+                    Screen s = context.client().currentScreen;
+                    if      (s instanceof BangTableScreen bts) bts.updateState(payload.stateJson());
+                    else if (s instanceof BangLobbyScreen bls) bls.updateState(payload.stateJson());
                 })
         );
 
