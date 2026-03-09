@@ -1,9 +1,11 @@
 package com.pokermc.screen;
 
 import com.google.gson.*;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
@@ -12,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Bang! lobby: Create (select 4/5/6 players) or Join.
+ * Bang! lobby: Sảnh chờ - hiển thị tên + head người chơi. Chủ phòng Start khi đủ người.
  */
 public class BangLobbyScreen extends Screen {
 
@@ -24,8 +26,11 @@ public class BangLobbyScreen extends Screen {
     private String stateJson = "{}";
     private final List<String> playerNames = new ArrayList<>();
     private boolean isEmpty = true;
-    private int maxPlayers = 4;
-    private int selectedMaxPlayers = 4;
+    private int maxPlayers = 2;
+    private int selectedMaxPlayers = 2;
+    private String phase = "WAITING";
+    private String gameOverWinner = "";
+    private boolean isHost = false;
 
     public BangLobbyScreen(BlockPos pos, String stateJson) {
         super(Text.literal("Bang! Lobby"));
@@ -48,41 +53,49 @@ public class BangLobbyScreen extends Screen {
         int btnX = bgX + (BG_W - btnW) / 2;
 
         if (isEmpty) {
-            // Create: first select player count
-            addDrawableChild(ButtonWidget.builder(Text.literal("4 Players"), b -> selectedMaxPlayers = 4)
-                    .dimensions(btnX - 70, bgY + 55, 50, 20).build());
-            addDrawableChild(ButtonWidget.builder(Text.literal("5 Players"), b -> selectedMaxPlayers = 5)
-                    .dimensions(btnX - 15, bgY + 55, 50, 20).build());
-            addDrawableChild(ButtonWidget.builder(Text.literal("6 Players"), b -> selectedMaxPlayers = 6)
-                    .dimensions(btnX + 40, bgY + 55, 50, 20).build());
+            // Create: chọn số người 2-7
+            addDrawableChild(ButtonWidget.builder(Text.literal("2"), b -> selectedMaxPlayers = 2)
+                    .dimensions(btnX - 100, bgY + 55, 28, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("4"), b -> selectedMaxPlayers = 4)
+                    .dimensions(btnX - 68, bgY + 55, 28, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("5"), b -> selectedMaxPlayers = 5)
+                    .dimensions(btnX - 36, bgY + 55, 28, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("6"), b -> selectedMaxPlayers = 6)
+                    .dimensions(btnX - 4, bgY + 55, 28, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("7"), b -> selectedMaxPlayers = 7)
+                    .dimensions(btnX + 28, bgY + 55, 28, 20).build());
 
             addDrawableChild(ButtonWidget.builder(Text.literal("✦ Create (" + selectedMaxPlayers + "p)"),
                     b -> {
                         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
                                 new com.pokermc.network.BangNetworking.BangActionPayload(
                                         tablePos, "CREATE", selectedMaxPlayers, ""));
-                        BangTableScreen ts = new BangTableScreen(tablePos, stateJson);
-                        client.setScreen(ts);
-                        ts.updateState(stateJson);
+                        // Stay in lobby; server will broadcast state
                     })
                     .dimensions(btnX, bgY + 85, btnW, btnH).build());
         } else if (alreadyInGame) {
-            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Enter Table"),
-                    b -> {
-                        BangTableScreen ts = new BangTableScreen(tablePos, stateJson);
-                        client.setScreen(ts);
-                        ts.updateState(stateJson);
-                    })
-                    .dimensions(btnX, bgY + 75, btnW, btnH).build());
+            if (isHost && "GAME_OVER".equals(phase)) {
+                addDrawableChild(ButtonWidget.builder(Text.literal("New Game"),
+                        b -> {
+                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                    new com.pokermc.network.BangNetworking.BangActionPayload(tablePos, "NEW_GAME", 0, ""));
+                        })
+                        .dimensions(btnX + 60, bgY + 75, 80, btnH).build());
+            } else if (isHost && playerNames.size() >= maxPlayers && "WAITING".equals(phase)) {
+                addDrawableChild(ButtonWidget.builder(Text.literal("▶ Start"),
+                        b -> {
+                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                                    new com.pokermc.network.BangNetworking.BangActionPayload(tablePos, "START", 0, ""));
+                        })
+                        .dimensions(btnX + 60, bgY + 75, 80, btnH).build());
+            }
         } else {
-            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Join Game"),
+            addDrawableChild(ButtonWidget.builder(Text.literal("▶ Join"),
                     b -> {
                         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
                                 new com.pokermc.network.BangNetworking.BangActionPayload(
                                         tablePos, "JOIN", 0, ""));
-                        BangTableScreen ts = new BangTableScreen(tablePos, stateJson);
-                        client.setScreen(ts);
-                        ts.updateState(stateJson);
+                        // Stay in lobby; server will broadcast state
                     })
                     .dimensions(btnX, bgY + 75, btnW, btnH).build());
         }
@@ -93,14 +106,20 @@ public class BangLobbyScreen extends Screen {
         try {
             JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
             playerNames.clear();
-            if (obj.has("players"))
-                for (JsonElement e : obj.getAsJsonArray("players"))
+            if (obj.has("players")) {
+                for (JsonElement e : obj.getAsJsonArray("players")) {
                     playerNames.add(e.getAsJsonObject().get("name").getAsString());
+                }
+            }
             if (obj.has("pendingPlayers"))
                 for (JsonElement e : obj.getAsJsonArray("pendingPlayers"))
-                    playerNames.add(e.getAsString() + " (waiting)");
+                    playerNames.add(e.getAsString());
             isEmpty = !obj.has("isEmpty") || obj.get("isEmpty").getAsBoolean();
-            maxPlayers = obj.has("maxPlayers") ? obj.get("maxPlayers").getAsInt() : 4;
+            maxPlayers = obj.has("maxPlayers") ? obj.get("maxPlayers").getAsInt() : 2;
+            phase = obj.has("phase") ? obj.get("phase").getAsString() : "WAITING";
+            gameOverWinner = obj.has("gameOverWinner") ? obj.get("gameOverWinner").getAsString() : "";
+            String myName = client != null && client.player != null ? client.player.getName().getString() : "";
+            isHost = !playerNames.isEmpty() && playerNames.get(0).equals(myName);
         } catch (Exception ignored) {}
     }
 
@@ -123,19 +142,35 @@ public class BangLobbyScreen extends Screen {
 
         if (isEmpty) {
             ctx.drawCenteredTextWithShadow(textRenderer, "Empty — Create room to start", cx, bgY + 38, C_GRAY);
+        } else if ("GAME_OVER".equals(phase) && !gameOverWinner.isEmpty()) {
+            String msg = "Outlaws".equals(gameOverWinner) ? "Outlaws win!" : "Renegade".equals(gameOverWinner) ? "Renegade wins!" : "Law wins!";
+            ctx.drawCenteredTextWithShadow(textRenderer, msg, cx, bgY + 38, C_ORANGE);
         } else {
             ctx.drawCenteredTextWithShadow(textRenderer,
                     "Players: " + playerNames.size() + " / " + maxPlayers, cx, bgY + 38, C_GOLD);
         }
 
         if (!isEmpty && !playerNames.isEmpty()) {
-            int colLeft = bgX + BG_W - 62;
-            int lineY = bgY + 52;
-            ctx.drawTextWithShadow(textRenderer, "Players:", colLeft, lineY - 12, C_GRAY);
-            for (int i = 0; i < Math.min(playerNames.size(), 6); i++) {
+            int headSize = 20;
+            int startX = bgX + 20;
+            int startY = bgY + 52;
+            ctx.drawTextWithShadow(textRenderer, "Players:", startX, startY - 12, C_GRAY);
+            for (int i = 0; i < Math.min(playerNames.size(), 7); i++) {
                 String name = playerNames.get(i);
-                if (textRenderer.getWidth(name) > 52) name = name.substring(0, 7) + "..";
-                ctx.drawTextWithShadow(textRenderer, "• " + name, colLeft, lineY + i * 10, C_WHITE);
+                int x = startX + (i % 4) * (headSize + 28);
+                int y = startY + (i / 4) * (headSize + 14);
+                PlayerListEntry entry = client != null && client.player != null
+                        ? client.player.networkHandler.getPlayerListEntry(name) : null;
+                if (entry != null) {
+                    var skin = entry.getSkinTextures().texture();
+                    ctx.drawTexture(skin, x, y, headSize, headSize, 8f, 8f, 8, 8, 64, 64);
+                    ctx.drawTexture(skin, x, y, headSize, headSize, 40f, 8f, 8, 8, 64, 64);
+                } else {
+                    ctx.fill(x, y, x + headSize, y + headSize, 0xFF555555);
+                    ctx.drawBorder(x, y, headSize, headSize, 0xFF888888);
+                }
+                String display = name.length() > 10 ? name.substring(0, 8) + ".." : name;
+                ctx.drawTextWithShadow(textRenderer, display, x + headSize + 4, y + 4, C_WHITE);
             }
         }
 

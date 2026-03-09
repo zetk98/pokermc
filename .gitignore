@@ -49,3 +49,6 @@ cfr-*.jar
 
 # Backup/temp
 *_backup.png
+
+# Node (tooling)
+node_modules/

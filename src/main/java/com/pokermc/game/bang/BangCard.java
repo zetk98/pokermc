@@ -34,6 +34,39 @@ public record BangCard(String typeId, String rankSuit) {
 
     public String toCode() { return typeId + ":" + rankSuit; }
 
+    /** Blue equipment cards. */
+    public boolean isBlue() {
+        return switch (typeId) {
+            case SCHOFIELD, VOLCANIC, REMINGTON, REV_CARBINE, WINCHESTER,
+                 MUSTANG, APPALOOSA, BARREL, DYNAMITE -> true;
+            default -> false;
+        };
+    }
+
+    /** Equipment category for no-duplicate check. Guns share "gun", others use typeId. */
+    public String getEquipmentType() {
+        return switch (typeId) {
+            case SCHOFIELD, VOLCANIC, REMINGTON, REV_CARBINE, WINCHESTER -> "gun";
+            default -> typeId;
+        };
+    }
+
+    public boolean isGun() {
+        return "gun".equals(getEquipmentType());
+    }
+
+    /** Hearts suit (Cơ) - last char H. */
+    public boolean isHearts() {
+        return rankSuit != null && rankSuit.endsWith("H");
+    }
+
+    /** Spades 2-9 (Bích 2-9) for Dynamite. */
+    public boolean isSpades2to9() {
+        if (rankSuit == null || !rankSuit.endsWith("S")) return false;
+        String r = rankSuit.substring(0, rankSuit.length() - 1);
+        return r.matches("[2-9]");
+    }
+
     public static BangCard fromCode(String code) {
         if (code == null || !code.contains(":")) return null;
         int colon = code.indexOf(':');
@@ -44,7 +77,7 @@ public record BangCard(String typeId, String rankSuit) {
     public static List<BangCard> buildDeck() {
         List<BangCard> deck = new ArrayList<>();
         add(deck, BANG, 25, "AS","AH","KH","QH","AD","2D","3D","4D","5D","6D","7D","8D","9D","TD","JD","QD","KD","2C","3C","4C","5C","6C","7C","8C","9C");
-        add(deck, MISSED, 12, "2S","3S","4S","5S","6S","7S","8S","9S","TS","JS","QS","KS","AS");
+        add(deck, MISSED, 12, "2S","3S","4S","5S","6S","7S","8S","10C","JC","QC","KC","AC");
         add(deck, BEER, 6, "6H","7H","8H","9H","TH","JH");
         add(deck, PANIC, 4, "JH","QH","AH","8D");
         add(deck, CAT_BALOU, 4, "9D","TD","JD","KH");

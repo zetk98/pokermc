@@ -68,33 +68,9 @@ public class PokerModClient implements ClientModInitializer {
                 (payload, context) -> {
                     context.client().execute(() -> {
                         try {
-                            String myName = context.client().player != null
-                                    ? context.client().player.getName().getString() : "";
-                            boolean inGame = false;
-                            try {
-                                JsonObject obj = JsonParser.parseString(payload.stateJson()).getAsJsonObject();
-                                if (obj.has("players")) {
-                                    for (JsonElement e : obj.getAsJsonArray("players")) {
-                                        if (e.getAsJsonObject().get("name").getAsString().equals(myName)) {
-                                            inGame = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (!inGame && obj.has("pendingPlayers")) {
-                                    for (JsonElement e : obj.getAsJsonArray("pendingPlayers")) {
-                                        if (e.getAsString().equals(myName)) { inGame = true; break; }
-                                    }
-                                }
-                            } catch (Exception ignored) {}
-                            if (inGame) {
-                                BangTableScreen ts = new BangTableScreen(payload.pos(), payload.stateJson());
-                                context.client().setScreen(ts);
-                                ts.updateState(payload.stateJson());
-                            } else {
-                                BangLobbyScreen lobby = new BangLobbyScreen(payload.pos(), payload.stateJson());
-                                context.client().setScreen(lobby);
-                            }
+                            BangLobbyScreen lobby = new BangLobbyScreen(payload.pos(), payload.stateJson());
+                            context.client().setScreen(lobby);
+                            lobby.updateState(payload.stateJson());
                         } catch (Exception e) {
                             System.err.println("[CasinoCraft] Bang error: " + e.getMessage());
                         }
@@ -165,8 +141,34 @@ public class PokerModClient implements ClientModInitializer {
                 BangNetworking.BangStatePayload.ID,
                 (payload, context) -> context.client().execute(() -> {
                     Screen s = context.client().currentScreen;
-                    if      (s instanceof BangTableScreen bts) bts.updateState(payload.stateJson());
-                    else if (s instanceof BangLobbyScreen bls) bls.updateState(payload.stateJson());
+                    String phase = "";
+                    boolean inGame = false;
+                    try {
+                        var obj = com.google.gson.JsonParser.parseString(payload.stateJson()).getAsJsonObject();
+                        phase = obj.has("phase") ? obj.get("phase").getAsString() : "";
+                        String myName = context.client().player != null ? context.client().player.getName().getString() : "";
+                        if (obj.has("players")) {
+                            for (com.google.gson.JsonElement e : obj.getAsJsonArray("players")) {
+                                if (e.getAsJsonObject().get("name").getAsString().equals(myName)) {
+                                    inGame = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                    if ("GAME_OVER".equals(phase) && s instanceof BangTableScreen) {
+                        BangLobbyScreen lobby = new BangLobbyScreen(payload.pos(), payload.stateJson());
+                        context.client().setScreen(lobby);
+                        lobby.updateState(payload.stateJson());
+                    } else if (("ROLE_REVEAL".equals(phase) || "DEALING".equals(phase) || "DEAL_FIRST".equals(phase) || "PLAYING".equals(phase) || "DISCARD".equals(phase) || "NEXT_TURN_DELAY".equals(phase)) && s instanceof BangLobbyScreen && inGame) {
+                        BangTableScreen ts = new BangTableScreen(payload.pos(), payload.stateJson());
+                        context.client().setScreen(ts);
+                        ts.updateState(payload.stateJson());
+                    } else if (s instanceof BangTableScreen bts) {
+                        bts.updateState(payload.stateJson());
+                    } else if (s instanceof BangLobbyScreen bls) {
+                        bls.updateState(payload.stateJson());
+                    }
                 })
         );
 
