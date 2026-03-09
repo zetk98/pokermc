@@ -8,6 +8,7 @@ public class PokerModDataGenerator implements DataGeneratorEntrypoint {
     @Override
     public void onInitializeDataGenerator(FabricDataGenerator fabricDataGenerator) {
         var pack = fabricDataGenerator.createPack();
-        pack.addProvider(PokerRecipeProvider::new);
+        // TODO: Update PokerRecipeProvider for 1.21.11 createRecipeProvider API
+        // pack.addProvider(PokerRecipeProvider::new);
     }
 }

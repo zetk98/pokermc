@@ -1,9 +1,0 @@
-package com.pokermc.config;
-
-/** @deprecated Dùng CasinoCraftConfig.get() */
-@Deprecated
-public class PokerConfig {
-    public static CasinoCraftConfig get() {
-        return CasinoCraftConfig.get();
-    }
-}

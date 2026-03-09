@@ -3,16 +3,16 @@ package com.pokermc;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.pokermc.network.BangNetworking;
-import com.pokermc.network.BlackjackNetworking;
-import com.pokermc.network.PokerNetworking;
-import com.pokermc.screen.BangLobbyScreen;
-import com.pokermc.screen.BangTableScreen;
-import com.pokermc.screen.BlackjackLobbyScreen;
-import com.pokermc.screen.BlackjackTableScreen;
-import com.pokermc.screen.PokerLobbyScreen;
-import com.pokermc.screen.PokerTableScreen;
-import com.pokermc.screen.TradeScreen;
+import com.pokermc.bang.network.BangNetworking;
+import com.pokermc.blackjack.network.BlackjackNetworking;
+import com.pokermc.poker.network.PokerNetworking;
+import com.pokermc.bang.screen.BangLobbyScreen;
+import com.pokermc.bang.screen.BangTableScreen;
+import com.pokermc.blackjack.screen.BlackjackLobbyScreen;
+import com.pokermc.blackjack.screen.BlackjackTableScreen;
+import com.pokermc.poker.screen.PokerLobbyScreen;
+import com.pokermc.poker.screen.PokerTableScreen;
+import com.pokermc.common.screen.TradeScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.screen.Screen;
@@ -156,11 +156,8 @@ public class PokerModClient implements ClientModInitializer {
                             }
                         }
                     } catch (Exception ignored) {}
-                    if ("GAME_OVER".equals(phase) && s instanceof BangTableScreen) {
-                        BangLobbyScreen lobby = new BangLobbyScreen(payload.pos(), payload.stateJson());
-                        context.client().setScreen(lobby);
-                        lobby.updateState(payload.stateJson());
-                    } else if (("ROLE_REVEAL".equals(phase) || "DEALING".equals(phase) || "DEAL_FIRST".equals(phase) || "PLAYING".equals(phase) || "DISCARD".equals(phase) || "NEXT_TURN_DELAY".equals(phase)) && s instanceof BangLobbyScreen && inGame) {
+                    // GAME_OVER: stay on BangTableScreen to show overlay + New Game button
+                    if (("ROLE_REVEAL".equals(phase) || "DEALING".equals(phase) || "DEAL_FIRST".equals(phase) || "PLAYING".equals(phase) || "DISCARD".equals(phase) || "NEXT_TURN_DELAY".equals(phase) || "GAME_OVER".equals(phase)) && s instanceof BangLobbyScreen && inGame) {
                         BangTableScreen ts = new BangTableScreen(payload.pos(), payload.stateJson());
                         context.client().setScreen(ts);
                         ts.updateState(payload.stateJson());

@@ -1,18 +1,18 @@
 package com.pokermc;
 
-import com.pokermc.block.BangTableBlock;
-import com.pokermc.block.BlackjackTableBlock;
-import com.pokermc.block.PokerTableBlock;
-import com.pokermc.blockentity.BangTableBlockEntity;
-import com.pokermc.blockentity.BlackjackTableBlockEntity;
-import com.pokermc.blockentity.PokerTableBlockEntity;
-import com.pokermc.network.BangNetworking;
-import com.pokermc.network.BlackjackNetworking;
-import com.pokermc.component.PokerComponents;
-import com.pokermc.config.PokerConfig;
-import com.pokermc.item.ZCoinBagItem;
-import com.pokermc.item.ZCoinItem;
-import com.pokermc.network.PokerNetworking;
+import com.pokermc.bang.block.BangTableBlock;
+import com.pokermc.blackjack.block.BlackjackTableBlock;
+import com.pokermc.poker.block.PokerTableBlock;
+import com.pokermc.bang.blockentity.BangTableBlockEntity;
+import com.pokermc.blackjack.blockentity.BlackjackTableBlockEntity;
+import com.pokermc.poker.blockentity.PokerTableBlockEntity;
+import com.pokermc.bang.network.BangNetworking;
+import com.pokermc.blackjack.network.BlackjackNetworking;
+import com.pokermc.common.component.PokerComponents;
+import com.pokermc.common.config.PokerConfig;
+import com.pokermc.common.item.ZCoinBagItem;
+import com.pokermc.common.item.ZCoinItem;
+import com.pokermc.poker.network.PokerNetworking;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -24,6 +24,8 @@ import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.text.Text;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
@@ -38,17 +40,23 @@ public class PokerMod implements ModInitializer {
                     .mapColor(MapColor.DARK_GREEN)
                     .strength(2.5f)
                     .nonOpaque()
+                    .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "poker_table")))
     );
 
     // Items
-    public static final ZCoinItem ZCOIN_ITEM = new ZCoinItem(new Item.Settings().maxCount(64));
-    public static final ZCoinBagItem ZCOIN_BAG_ITEM = new ZCoinBagItem(new Item.Settings().maxCount(1));
+    public static final ZCoinItem ZCOIN_ITEM = new ZCoinItem(new Item.Settings()
+            .maxCount(64)
+            .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin"))));
+    public static final ZCoinBagItem ZCOIN_BAG_ITEM = new ZCoinBagItem(new Item.Settings()
+            .maxCount(1)
+            .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin_bag"))));
 
     public static final BlackjackTableBlock BLACKJACK_TABLE_BLOCK = new BlackjackTableBlock(
             AbstractBlock.Settings.create()
                     .mapColor(MapColor.MAGENTA)
                     .strength(2.5f)
                     .nonOpaque()
+                    .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "blackjack_table")))
     );
 
     public static final BangTableBlock BANG_TABLE_BLOCK = new BangTableBlock(
@@ -56,20 +64,21 @@ public class PokerMod implements ModInitializer {
                     .mapColor(MapColor.TERRACOTTA_ORANGE)
                     .strength(2.5f)
                     .nonOpaque()
+                    .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "bang_table")))
     );
 
     // Block items
     public static final BlockItem POKER_TABLE_ITEM = new BlockItem(
             POKER_TABLE_BLOCK,
-            new Item.Settings()
+            new Item.Settings().registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "poker_table")))
     );
     public static final BlockItem BLACKJACK_TABLE_ITEM = new BlockItem(
             BLACKJACK_TABLE_BLOCK,
-            new Item.Settings()
+            new Item.Settings().registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "blackjack_table")))
     );
     public static final BlockItem BANG_TABLE_ITEM = new BlockItem(
             BANG_TABLE_BLOCK,
-            new Item.Settings()
+            new Item.Settings().registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "bang_table")))
     );
 
     // Block entity types — initialized in onInitialize
@@ -95,17 +104,17 @@ public class PokerMod implements ModInitializer {
         POKER_TABLE_BLOCK_ENTITY = Registry.register(
                 Registries.BLOCK_ENTITY_TYPE,
                 Identifier.of(MOD_ID, "poker_table"),
-                BlockEntityType.Builder.create(PokerTableBlockEntity::new, POKER_TABLE_BLOCK).build()
+                net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(PokerTableBlockEntity::new, POKER_TABLE_BLOCK).build()
         );
         BLACKJACK_TABLE_BLOCK_ENTITY = Registry.register(
                 Registries.BLOCK_ENTITY_TYPE,
                 Identifier.of(MOD_ID, "blackjack_table"),
-                BlockEntityType.Builder.create(BlackjackTableBlockEntity::new, BLACKJACK_TABLE_BLOCK).build()
+                net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(BlackjackTableBlockEntity::new, BLACKJACK_TABLE_BLOCK).build()
         );
         BANG_TABLE_BLOCK_ENTITY = Registry.register(
                 Registries.BLOCK_ENTITY_TYPE,
                 Identifier.of(MOD_ID, "bang_table"),
-                BlockEntityType.Builder.create(BangTableBlockEntity::new, BANG_TABLE_BLOCK).build()
+                net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(BangTableBlockEntity::new, BANG_TABLE_BLOCK).build()
         );
 
         // Register S2C custom payloads
