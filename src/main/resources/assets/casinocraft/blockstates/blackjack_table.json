@@ -1,1 +1,7 @@
-{"variants":{"":{"model":"casinocraft:block/blackjack_table"}}}
+{
+  "variants": {
+    "": [
+      { "model": "casinocraft:block/blackjack_table" }
+    ]
+  }
+}

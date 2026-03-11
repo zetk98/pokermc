@@ -1,5 +1,7 @@
 {
   "variants": {
-    "": { "model": "casinocraft:block/poker_table" }
+    "": [
+      { "model": "casinocraft:block/poker_table" }
+    ]
   }
 }

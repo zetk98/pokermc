@@ -1,5 +1,7 @@
 {
   "variants": {
-    "": { "model": "casinocraft:block/bang_table" }
+    "": [
+      { "model": "casinocraft:block/bang_table" }
+    ]
   }
 }

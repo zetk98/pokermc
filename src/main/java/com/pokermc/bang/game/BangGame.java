@@ -494,39 +494,43 @@ public class BangGame {
         return true;
     }
 
-    /** Target chooses card. data = "hand:2", "hand:random", or "equip:1". Panic: hand only. Cat Balou: hand (random) or equip. */
+    /** Panic: victim chooses from hand. Cat Balou: attacker chooses from victim's hand/equip. data = "hand:random" or "equip:1". */
     public boolean chooseCardToGive(String playerName, String data) {
         if (phase != Phase.CHOOSE_CARD || pendingChooseTarget < 0) return false;
-        PlayerState target = players.get(pendingChooseTarget);
-        if (!target.name.equals(playerName)) return false;
+        PlayerState victim = players.get(pendingChooseTarget);
+        PlayerState chooser = pendingChooseIsPanic ? victim : players.get(pendingChooseSource);
+        if (!chooser.name.equals(playerName)) return false;
         if (pendingChooseIsPanic && data != null && data.startsWith("equip:")) return false; // Panic: hand only
         BangCard chosen = null;
         if (data != null && data.startsWith("hand:")) {
             String sub = data.substring(5);
             int hi;
-            if ("random".equals(sub) && !target.hand.isEmpty()) {
-                hi = new Random().nextInt(target.hand.size());
+            if ("random".equals(sub) && !victim.hand.isEmpty()) {
+                hi = new Random().nextInt(victim.hand.size());
             } else {
                 try { hi = Integer.parseInt(sub); } catch (NumberFormatException e) { return false; }
             }
-            if (hi >= 0 && hi < target.hand.size()) {
-                chosen = target.hand.remove(hi);
+            if (hi >= 0 && hi < victim.hand.size()) {
+                chosen = victim.hand.remove(hi);
             }
         } else if (data != null && data.startsWith("equip:") && !pendingChooseIsPanic) {
             int ei;
             try { ei = Integer.parseInt(data.substring(6)); } catch (NumberFormatException e) { return false; }
-            if (ei >= 0 && ei < target.equipment.size()) {
-                chosen = target.equipment.remove(ei);
-                recalcEquipmentStats(target);
+            if (ei >= 0 && ei < victim.equipment.size()) {
+                BangCard eq = victim.equipment.get(ei);
+                if (eq != null && !isRoleOrCharacter(eq)) {
+                    chosen = victim.equipment.remove(ei);
+                    recalcEquipmentStats(victim);
+                }
             }
         }
         if (chosen == null) return false;
         if (pendingChooseIsPanic) {
             players.get(pendingChooseSource).hand.add(chosen);
-            statusMessage = target.name + " gave " + chosen.typeId() + " to " + players.get(pendingChooseSource).name;
+            statusMessage = victim.name + " gave " + chosen.typeId() + " to " + players.get(pendingChooseSource).name;
         } else {
             discardPile.add(chosen);
-            statusMessage = target.name + " discarded " + chosen.typeId();
+            statusMessage = victim.name + " discarded " + chosen.typeId();
         }
         phase = Phase.PLAYING;
         pendingChooseTarget = -1;
@@ -535,11 +539,19 @@ public class BangGame {
     }
 
     public boolean isChoosingCard(String playerName) {
-        return phase == Phase.CHOOSE_CARD && pendingChooseTarget >= 0
-                && players.get(pendingChooseTarget).name.equals(playerName);
+        if (phase != Phase.CHOOSE_CARD || pendingChooseTarget < 0) return false;
+        String chooser = pendingChooseIsPanic ? players.get(pendingChooseTarget).name : players.get(pendingChooseSource).name;
+        return chooser.equals(playerName);
     }
 
+    /** Chooser: Panic=victim, Cat Balou=attacker. */
     public String getChoosingTargetName() {
+        if (phase != Phase.CHOOSE_CARD || pendingChooseTarget < 0) return null;
+        return pendingChooseIsPanic ? players.get(pendingChooseTarget).name : players.get(pendingChooseSource).name;
+    }
+
+    /** Victim (whose card is taken). For Cat Balou, client shows victim's panel to attacker. */
+    public String getChooseVictimName() {
         if (phase != Phase.CHOOSE_CARD || pendingChooseTarget < 0) return null;
         return players.get(pendingChooseTarget).name;
     }
@@ -1031,6 +1043,11 @@ public class BangGame {
             if (eqType.equals(p.equipment.get(i).getEquipmentType())) return i;
         }
         return -1;
+    }
+
+    /** Role/character not in equipment; exclude for future. */
+    private boolean isRoleOrCharacter(BangCard c) {
+        return c != null && ("role".equals(c.typeId()) || "character".equals(c.typeId()));
     }
 
     private void applyEquipment(PlayerState p, BangCard c) {

@@ -34,7 +34,6 @@ loom {
 }
 
 repositories {
-    // Extra repos if needed
 }
 
 dependencies {

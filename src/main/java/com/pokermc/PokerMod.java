@@ -18,8 +18,10 @@ import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.AbstractBlock;
+import net.minecraft.block.Block;
 import net.minecraft.block.MapColor;
 import net.minecraft.block.entity.BlockEntityType;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -34,71 +36,73 @@ public class PokerMod implements ModInitializer {
 
     public static final String MOD_ID = "casinocraft";
 
-    // Block
-    public static final PokerTableBlock POKER_TABLE_BLOCK = new PokerTableBlock(
-            AbstractBlock.Settings.create()
-                    .mapColor(MapColor.DARK_GREEN)
-                    .strength(2.5f)
-                    .nonOpaque()
-                    .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "poker_table")))
-    );
-
-    // Items
-    public static final ZCoinItem ZCOIN_ITEM = new ZCoinItem(new Item.Settings()
-            .maxCount(64)
-            .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin"))));
-    public static final ZCoinBagItem ZCOIN_BAG_ITEM = new ZCoinBagItem(new Item.Settings()
-            .maxCount(1)
-            .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin_bag"))));
-
-    public static final BlackjackTableBlock BLACKJACK_TABLE_BLOCK = new BlackjackTableBlock(
-            AbstractBlock.Settings.create()
-                    .mapColor(MapColor.MAGENTA)
-                    .strength(2.5f)
-                    .nonOpaque()
-                    .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "blackjack_table")))
-    );
-
-    public static final BangTableBlock BANG_TABLE_BLOCK = new BangTableBlock(
-            AbstractBlock.Settings.create()
-                    .mapColor(MapColor.TERRACOTTA_ORANGE)
-                    .strength(2.5f)
-                    .nonOpaque()
-                    .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "bang_table")))
-    );
-
-    // Block items
-    public static final BlockItem POKER_TABLE_ITEM = new BlockItem(
-            POKER_TABLE_BLOCK,
-            new Item.Settings().registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "poker_table")))
-    );
-    public static final BlockItem BLACKJACK_TABLE_ITEM = new BlockItem(
-            BLACKJACK_TABLE_BLOCK,
-            new Item.Settings().registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "blackjack_table")))
-    );
-    public static final BlockItem BANG_TABLE_ITEM = new BlockItem(
-            BANG_TABLE_BLOCK,
-            new Item.Settings().registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "bang_table")))
-    );
-
-    // Block entity types — initialized in onInitialize
+    // Blocks, block items, block entity types — initialized in onInitialize (1.21+ requires register-then-use)
+    public static PokerTableBlock POKER_TABLE_BLOCK;
+    public static BlackjackTableBlock BLACKJACK_TABLE_BLOCK;
+    public static BangTableBlock BANG_TABLE_BLOCK;
+    public static BlockItem POKER_TABLE_ITEM;
+    public static BlockItem BLACKJACK_TABLE_ITEM;
+    public static BlockItem BANG_TABLE_ITEM;
+    public static ZCoinItem ZCOIN_ITEM;
+    public static ZCoinBagItem ZCOIN_BAG_ITEM;
     public static BlockEntityType<PokerTableBlockEntity> POKER_TABLE_BLOCK_ENTITY;
     public static BlockEntityType<BlackjackTableBlockEntity> BLACKJACK_TABLE_BLOCK_ENTITY;
     public static BlockEntityType<BangTableBlockEntity> BANG_TABLE_BLOCK_ENTITY;
+
+    private static <T extends Block> T registerBlock(String name, T block, boolean withItem) {
+        RegistryKey<Block> blockKey = RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, name));
+        T registered = (T) Registry.register(Registries.BLOCK, blockKey, block);
+        if (withItem) {
+            BlockItem item = new BlockItem(registered, new Item.Settings()
+                    .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, name)))
+                    .useBlockPrefixedTranslationKey()
+                    .component(DataComponentTypes.ITEM_MODEL, Identifier.of(MOD_ID, "item/" + name)));
+            Registry.register(Registries.ITEM, Identifier.of(MOD_ID, name), item);
+        }
+        return registered;
+    }
 
     @Override
     public void onInitialize() {
         PokerConfig.get();
         PokerComponents.ZCOIN_BAG_BALANCE.toString(); // ensure component is registered
-        // Register block & item
-        Registry.register(Registries.BLOCK, Identifier.of(MOD_ID, "poker_table"), POKER_TABLE_BLOCK);
-        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "poker_table"), POKER_TABLE_ITEM);
-        Registry.register(Registries.BLOCK, Identifier.of(MOD_ID, "blackjack_table"), BLACKJACK_TABLE_BLOCK);
-        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "blackjack_table"), BLACKJACK_TABLE_ITEM);
-        Registry.register(Registries.BLOCK, Identifier.of(MOD_ID, "bang_table"), BANG_TABLE_BLOCK);
-        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "bang_table"), BANG_TABLE_ITEM);
-        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin"), ZCOIN_ITEM);
-        Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin_bag"), ZCOIN_BAG_ITEM);
+
+        // Create and register blocks (must register immediately in 1.21+)
+        POKER_TABLE_BLOCK = registerBlock("poker_table", new PokerTableBlock(
+                AbstractBlock.Settings.create()
+                        .mapColor(MapColor.DARK_GREEN)
+                        .strength(2.5f)
+                        .nonOpaque()
+                        .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "poker_table")))),
+                true);
+        POKER_TABLE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "poker_table"));
+
+        BLACKJACK_TABLE_BLOCK = registerBlock("blackjack_table", new BlackjackTableBlock(
+                AbstractBlock.Settings.create()
+                        .mapColor(MapColor.MAGENTA)
+                        .strength(2.5f)
+                        .nonOpaque()
+                        .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "blackjack_table")))),
+                true);
+        BLACKJACK_TABLE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "blackjack_table"));
+
+        BANG_TABLE_BLOCK = registerBlock("bang_table", new BangTableBlock(
+                AbstractBlock.Settings.create()
+                        .mapColor(MapColor.TERRACOTTA_ORANGE)
+                        .strength(2.5f)
+                        .nonOpaque()
+                        .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "bang_table")))),
+                true);
+        BANG_TABLE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "bang_table"));
+
+        ZCOIN_ITEM = Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin"),
+                new ZCoinItem(new Item.Settings().maxCount(64)
+                        .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin")))
+                        .component(DataComponentTypes.ITEM_MODEL, Identifier.of(MOD_ID, "item/zcoin"))));
+        ZCOIN_BAG_ITEM = Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin_bag"),
+                new ZCoinBagItem(new Item.Settings().maxCount(1)
+                        .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin_bag")))
+                        .component(DataComponentTypes.ITEM_MODEL, Identifier.of(MOD_ID, "item/zcoin_bag"))));
 
         // Register block entity type using vanilla builder (no deprecated Fabric wrapper)
         POKER_TABLE_BLOCK_ENTITY = Registry.register(

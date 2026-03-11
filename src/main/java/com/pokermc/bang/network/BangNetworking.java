@@ -69,6 +69,8 @@ public class BangNetworking {
         if (game.getPhase() == BangGame.Phase.CHOOSE_CARD && game.getChoosingTargetName() != null) {
             root.addProperty("chooseTarget", game.getChoosingTargetName());
             root.addProperty("chooseIsPanic", game.isChoosePanic());
+            if (!game.isChoosePanic() && game.getChooseVictimName() != null)
+                root.addProperty("chooseVictim", game.getChooseVictimName());
         }
         if (game.getPhase() == BangGame.Phase.JAIL_CHECK && game.getPendingJailDrawnCard() != null) {
             root.addProperty("jailDrawnCard", game.getPendingJailDrawnCard().toCode());
