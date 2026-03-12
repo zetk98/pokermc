@@ -2,12 +2,8 @@
   "type": "minecraft:crafting_shaped",
   "category": "building",
   "key": {
-    "R": {
-      "item": "minecraft:pink_wool"
-    },
-    "W": {
-      "item": "minecraft:oak_planks"
-    }
+    "R": "minecraft:pink_wool",
+    "W": "minecraft:oak_planks"
   },
   "pattern": [
     "RRR",

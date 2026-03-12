@@ -1,7 +1,7 @@
 {
   "parent": "minecraft:block/cube_bottom_top",
   "textures": {
-    "top": "casinocraft:block/poker_table_top",
+    "top": "casinocraft:block/poker_table_top_edit",
     "bottom": "casinocraft:block/poker_table_side",
     "side": "casinocraft:block/poker_table_side"
   }

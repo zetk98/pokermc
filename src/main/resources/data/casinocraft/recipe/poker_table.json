@@ -2,12 +2,8 @@
   "type": "minecraft:crafting_shaped",
   "category": "building",
   "key": {
-    "G": {
-      "item": "minecraft:green_wool"
-    },
-    "W": {
-      "item": "minecraft:oak_planks"
-    }
+    "G": "minecraft:green_wool",
+    "W": "minecraft:oak_planks"
   },
   "pattern": [
     "GGG",

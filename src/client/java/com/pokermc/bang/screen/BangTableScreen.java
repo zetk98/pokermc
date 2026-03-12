@@ -76,6 +76,7 @@ public class BangTableScreen extends Screen {
 
     /** Player hitbox: 6*24+5*1+2=153, 14+34+1+34=83 */
     private static final int PANEL_W = 153, PANEL_H = 84;
+    private static final int INNER_PAD_LEFT = 2;
     private static final int PANEL_SLOT_W = 24, PANEL_SLOT_H = 34;
     private record PlayerPosition(int hitboxX, int hitboxY, int hitboxW, int hitboxH) {}
     private final List<PlayerPosition> positionCache = new ArrayList<>();
@@ -112,9 +113,6 @@ public class BangTableScreen extends Screen {
         myName = MinecraftClient.getInstance().player != null
                 ? MinecraftClient.getInstance().player.getName().getString() : "";
 
-        panelOverlay = new PanelClickOverlay(0, 0, width, height, this);
-        addDrawableChild(panelOverlay);
-
         int btnW = 50, btnH = 14;
         btnLeave = addDrawableChild(ButtonWidget.builder(Text.literal(BangLang.tr("Leave", "Rời bàn")),
                 b -> { sendAction("LEAVE", 0, ""); close(); })
@@ -139,6 +137,9 @@ public class BangTableScreen extends Screen {
         btnNewGame = addDrawableChild(ButtonWidget.builder(Text.literal(BangLang.tr("New Game", "Ván mới")),
                 b -> { sendAction("NEW_GAME", 0, ""); })
                 .dimensions(0, 0, btnW * 2, btnH).build());
+
+        panelOverlay = new PanelClickOverlay(0, 0, width, height, this);
+        addDrawableChild(panelOverlay);
 
         updateButtons();
     }
@@ -740,8 +741,7 @@ public class BangTableScreen extends Screen {
         int hy = isHero ? height - PANEL_H - pad : pos.hitboxY();
 
         int innerPad = 1;
-        int innerL = hx + innerPad, innerT = hy + innerPad;
-        int innerR = hx + PANEL_W - innerPad, innerB = hy + PANEL_H - innerPad;
+        int innerL = hx + INNER_PAD_LEFT, innerT = hy + innerPad, innerR = hx + PANEL_W - innerPad, innerB = hy + PANEL_H - innerPad;
         ctx.drawStrokedRectangle(hx, hy, PANEL_W, PANEL_H, 0xFF555555);
         ctx.fill(innerL, innerT, innerR, innerB, 0x44000000);
         if (isCurrent) ctx.drawStrokedRectangle(hx, hy, PANEL_W, PANEL_H, C_ORANGE);
@@ -837,7 +837,7 @@ public class BangTableScreen extends Screen {
     }
 
     private void drawRoleCardScaled(DrawContext ctx, int x, int y, String role, int w, int h) {
-        Identifier tex = Identifier.of("bang", "textures/roles/split/role_" + role.toLowerCase() + ".png");
+        Identifier tex = Identifier.of("bang", "textures/roles/split/role_" + role.toLowerCase().replace(" ", "_") + ".png");
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, tex, x, y, 0, 0, w, h, TEX_CARD_W, TEX_CARD_H);
     }
 
@@ -847,7 +847,7 @@ public class BangTableScreen extends Screen {
             ctx.drawTexture(RenderPipelines.GUI_TEXTURED, TEX_CARD_BACK, x, y, 0, 0, w, h, TEX_CARD_W, TEX_CARD_H);
             return;
         }
-        String path = BANG_TEX_SPLIT + card.typeId() + "_" + card.rankSuit().toLowerCase() + ".png";
+        String path = BANG_TEX_SPLIT + card.typeId().toLowerCase() + "_" + card.rankSuit().toLowerCase() + ".png";
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, Identifier.of("bang", path), x, y, 0, 0, w, h, TEX_CARD_W, TEX_CARD_H);
     }
 
@@ -917,7 +917,7 @@ public class BangTableScreen extends Screen {
             int rowGreenY = hy + innerPad + headerH;
             int rowBlueY = hy + innerPad + headerH + PANEL_SLOT_H + 1;
             for (int s = 0; s < 6; s++) {
-                int sx = hx + innerPad + s * (PANEL_SLOT_W + 1);
+                int sx = hx + INNER_PAD_LEFT + s * (PANEL_SLOT_W + 1);
                 if (mouseX >= sx && mouseX <= sx + PANEL_SLOT_W && mouseY >= rowBlueY && mouseY <= rowBlueY + PANEL_SLOT_H) {
                     if (s == 0 && !p.role.isEmpty() && (playerIdx == sheriffIndex || isHero)) {
                         ctx.drawTooltip(textRenderer, List.of(Text.literal(getRoleDescription(p.role))), mouseX, mouseY);
@@ -1013,7 +1013,7 @@ public class BangTableScreen extends Screen {
 
     /** Role card */
     private void drawRoleCard(DrawContext ctx, int x, int y, String role) {
-        Identifier tex = Identifier.of("bang", "textures/roles/split/role_" + role.toLowerCase() + ".png");
+        Identifier tex = Identifier.of("bang", "textures/roles/split/role_" + role.toLowerCase().replace(" ", "_") + ".png");
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, tex, x, y, 0, 0, CARD_W, CARD_H, TEX_CARD_W, TEX_CARD_H);
     }
 
@@ -1021,14 +1021,14 @@ public class BangTableScreen extends Screen {
     private void drawBangCard(DrawContext ctx, int x, int y, String code) {
         BangCard card = BangCard.fromCode(code);
         if (card == null) { drawCardBack(ctx, x, y); return; }
-        String splitPath = BANG_TEX_SPLIT + card.typeId() + "_" + card.rankSuit().toLowerCase() + ".png";
+        String splitPath = BANG_TEX_SPLIT + card.typeId().toLowerCase() + "_" + card.rankSuit().toLowerCase() + ".png";
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, Identifier.of("bang", splitPath), x, y, 0, 0, CARD_W, CARD_H, TEX_CARD_W, TEX_CARD_H);
     }
 
     private void drawBangCardAt(DrawContext ctx, float x, float y, String code) {
         BangCard card = BangCard.fromCode(code);
         if (card == null) { drawCardBackAt(ctx, x, y); return; }
-        String splitPath = BANG_TEX_SPLIT + card.typeId() + "_" + card.rankSuit().toLowerCase() + ".png";
+        String splitPath = BANG_TEX_SPLIT + card.typeId().toLowerCase() + "_" + card.rankSuit().toLowerCase() + ".png";
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, Identifier.of("bang", splitPath), (int) x, (int) y, 0, 0, CARD_W, CARD_H, TEX_CARD_W, TEX_CARD_H);
     }
 
@@ -1077,31 +1077,35 @@ public class BangTableScreen extends Screen {
         if (isCatBalouAttacker && hero != null) {
             int n = Math.min(players.size(), Math.min(positionCache.size(), displayOrder.size()));
             int innerPad = 1;
+            int headerH = 12;
+            int rowBlueY = 0;
             for (int i = 0; i < n; i++) {
                 PlayerInfo p = players.get(displayOrder.get(i));
                 if (!p.name.equals(chooseVictim)) continue;
                 int hx = positionCache.get(i).hitboxX();
                 int hy = positionCache.get(i).hitboxY();
-                int rowBlueY = hy + innerPad + 12 + PANEL_SLOT_H + 1;
+                rowBlueY = hy + innerPad + headerH + PANEL_SLOT_H + 1;
                 for (int s = 1; s <= MAX_EQUIP_SLOTS; s++) {
                     String code = getEquipmentAtSlot(p, s - 1);
                     if (code != null) {
                         int eqIdx = p.equipment.indexOf(code);
-                        if (eqIdx >= 0) {
-                            BangCard c = BangCard.fromCode(code);
-                            if (c != null && !"role".equals(c.typeId()) && !"character".equals(c.typeId())) {
-                                int sx = hx + innerPad + s * (PANEL_SLOT_W + 1);
-                                if (mouseX >= sx && mouseX <= sx + PANEL_SLOT_W && mouseY >= rowBlueY && mouseY <= rowBlueY + PANEL_SLOT_H) {
-                                    int[] dc = getDeckCenter();
-                                    discardFlyAnims.add(new DiscardFlyAnim(sx + 1, rowBlueY + 1, dc[0] + FRAME_W + 2, dc[1], code, System.currentTimeMillis()));
-                                    sendAction("CHOOSE_CARD", 0, "equip:" + eqIdx);
-                                    return true;
-                                }
+                        BangCard c = BangCard.fromCode(code);
+                        if (eqIdx >= 0 && c != null && !"role".equals(c.typeId()) && !"character".equals(c.typeId())) {
+                            int sx = hx + INNER_PAD_LEFT + s * (PANEL_SLOT_W + 1);
+                            if (mouseX >= sx && mouseX <= sx + PANEL_SLOT_W && mouseY >= rowBlueY && mouseY <= rowBlueY + PANEL_SLOT_H) {
+                                int[] dc = getDeckCenter();
+                                discardFlyAnims.add(new DiscardFlyAnim(sx + 1, rowBlueY + 1, dc[0] + FRAME_W + 2, dc[1], code, System.currentTimeMillis()));
+                                sendAction("CHOOSE_CARD", 0, "equip:" + eqIdx);
+                                return true;
                             }
                         }
                     }
                 }
-                if (mouseX >= hx && mouseX <= hx + PANEL_W && mouseY >= hy && mouseY <= hy + PANEL_H && !p.hand.isEmpty()) {
+                boolean inRoleOrJailSlot = false;
+                int sx0 = hx + INNER_PAD_LEFT, sx5 = hx + INNER_PAD_LEFT + 5 * (PANEL_SLOT_W + 1);
+                if ((mouseX >= sx0 && mouseX <= sx0 + PANEL_SLOT_W) || (mouseX >= sx5 && mouseX <= sx5 + PANEL_SLOT_W))
+                    if (mouseY >= rowBlueY && mouseY <= rowBlueY + PANEL_SLOT_H) inRoleOrJailSlot = true;
+                if (!inRoleOrJailSlot && mouseX >= hx && mouseX <= hx + PANEL_W && mouseY >= hy && mouseY <= hy + PANEL_H && !p.hand.isEmpty()) {
                     sendAction("CHOOSE_CARD", 0, "hand:random");
                     return true;
                 }
@@ -1155,7 +1159,7 @@ public class BangTableScreen extends Screen {
                 if (code != null) {
                     int eqIdx = hero.equipment.indexOf(code);
                     if (eqIdx >= 0) {
-                        int sx = heroHx + innerPad + s * (PANEL_SLOT_W + 1);
+                        int sx = heroHx + INNER_PAD_LEFT + s * (PANEL_SLOT_W + 1);
                         if (mouseX >= sx && mouseX <= sx + PANEL_SLOT_W && mouseY >= rowBlueY && mouseY <= rowBlueY + PANEL_SLOT_H) {
                             discardFlyAnims.add(new DiscardFlyAnim(sx + 1, rowBlueY + 1, toX, toY, code, System.currentTimeMillis()));
                             sendAction("CHOOSE_CARD", 0, "equip:" + eqIdx);
@@ -1182,9 +1186,11 @@ public class BangTableScreen extends Screen {
         return super.mouseClicked(click, doubled);
     }
 
+    /** Lá xanh: chỉ Jail cần mục tiêu. Lá xám (đánh): Bang, Duel, Panic, Cat Balou cần mục tiêu. */
     private boolean needsTarget(String typeId) {
+        if (BangCard.JAIL.equals(typeId)) return true;
         return BangCard.BANG.equals(typeId) || BangCard.PANIC.equals(typeId) || BangCard.CAT_BALOU.equals(typeId)
-                || BangCard.DUEL.equals(typeId) || BangCard.JAIL.equals(typeId);
+                || BangCard.DUEL.equals(typeId);
     }
 
     @Override
