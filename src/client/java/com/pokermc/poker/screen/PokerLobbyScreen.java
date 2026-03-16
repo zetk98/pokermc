@@ -14,15 +14,13 @@ import net.minecraft.util.math.BlockPos;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.pokermc.common.screen.TradeScreen;
-
 /**
  * Landing lobby shown when a player right-clicks the poker table.
  *
- * Always 3 buttons:
+ * Buttons:
  *  1. "Create Room" (isEmpty) or "Join Game" (has players)
- *  2. "Exchange" (item ↔ ZC trade screen)
- *  3. "Top Players" (leaderboard toggle)
+ *  2. "Top Players" (leaderboard toggle)
+ * Use Market block for item ↔ ZC.
  */
 public class PokerLobbyScreen extends Screen {
 
@@ -107,10 +105,6 @@ public class PokerLobbyScreen extends Screen {
             addDrawableChild(joinBtn.build()).active = canJoin;
         }
 
-        // ── Button 2: Exchange ────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.literal("⇄ Exchange"),
-                b -> client.setScreen(new TradeScreen(tablePos, stateJson)))
-                .dimensions(btnX, bgY + 105, btnW, btnH).build());
     }
 
     // ── State ─────────────────────────────────────────────────────────────────

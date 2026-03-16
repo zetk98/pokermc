@@ -32,4 +32,11 @@ public class PokerComponents {
             Identifier.of(PokerMod.MOD_ID, "lottery_ticket_day"),
             ComponentType.<Long>builder().codec(Codec.LONG).build()
     );
+
+    /** Golden Ticket tier index (0=5zc, 1=10zc, 2=20zc, etc.). */
+    public static final ComponentType<Integer> GOLDEN_TICKET_TIER = Registry.register(
+            Registries.DATA_COMPONENT_TYPE,
+            Identifier.of(PokerMod.MOD_ID, "golden_ticket_tier"),
+            ComponentType.<Integer>builder().codec(Codec.INT).build()
+    );
 }

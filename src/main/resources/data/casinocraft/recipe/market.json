@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "C": "minecraft:copper_ingot",
+    "G": "minecraft:gold_ingot",
+    "W": "minecraft:oak_planks"
+  },
+  "pattern": [
+    "CGC",
+    "G G",
+    "W W"
+  ],
+  "result": {
+    "count": 1,
+    "id": "casinocraft:market"
+  }
+}

@@ -3,7 +3,10 @@
   "block.casinocraft.blackjack_table": "Blackjack Table",
   "block.casinocraft.bang_table": "Bang! Table",
   "block.casinocraft.xoso_table": "Lottery",
+  "block.casinocraft.golden_ticket_table": "Golden Ticket",
+  "block.casinocraft.market": "Market",
   "item.casinocraft.lottery_ticket": "Lottery Ticket",
+  "item.casinocraft.golden_ticket": "Golden Ticket",
   "item.casinocraft.zcoin": "ZCoin",
   "item.casinocraft.zcoin_bag": "ZCoin Bag",
   "itemGroup.casinocraft": "CasinoCraft"

@@ -4,6 +4,8 @@
     "casinocraft:poker_table",
     "casinocraft:blackjack_table",
     "casinocraft:bang_table",
-    "casinocraft:xoso_table"
+    "casinocraft:xoso_table",
+    "casinocraft:golden_ticket_table",
+    "casinocraft:market"
   ]
 }

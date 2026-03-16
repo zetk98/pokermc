@@ -8,12 +8,16 @@ import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Identifier;
 
+import com.pokermc.goldenticket.game.GoldenTicketTierConfig;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -59,22 +63,39 @@ public class CasinoCraftConfig {
     public int xosoPrizeNhi = 200;       // Giải nhì
     public int xosoPrizeBa = 50;         // Giải ba
 
+    // ── Golden Ticket gacha tiers ───────────────────────────────────────────────
+    public List<GoldenTicketTierConfig> goldenTicketTiers = new ArrayList<>();
+
+    // ── Market (dynamic mineral prices, refresh 5 min) ───────────────────────────
+    public Map<String, Integer> marketBasePrices = new LinkedHashMap<>();
+
     // ── Trades (item ↔ ZC) ─────────────────────────────────────────────────────
     public Map<String, Integer> buyRates = new LinkedHashMap<>();
     public Map<String, Integer> sellRates = new LinkedHashMap<>();
     public Map<String, Integer> sellGives = new LinkedHashMap<>();
 
     public CasinoCraftConfig() {
+        marketBasePrices.put("minecraft:iron_ingot", 2);
+        marketBasePrices.put("minecraft:copper_ingot", 2);
+        marketBasePrices.put("minecraft:gold_ingot", 3);
+        marketBasePrices.put("minecraft:emerald", 7);
+        marketBasePrices.put("minecraft:diamond", 13);
+        goldenTicketTiers.add(GoldenTicketTierConfig.tier5());
+        goldenTicketTiers.add(GoldenTicketTierConfig.tier10());
+        goldenTicketTiers.add(GoldenTicketTierConfig.tier20());
         buyRates.put("minecraft:iron_ingot", 2);
         buyRates.put("minecraft:gold_ingot", 3);
+        buyRates.put("minecraft:copper_ingot", 2);
         buyRates.put("minecraft:emerald", 7);
         buyRates.put("minecraft:diamond", 13);
         sellRates.put("minecraft:iron_ingot", 2);
         sellRates.put("minecraft:gold_ingot", 3);
+        sellRates.put("minecraft:copper_ingot", 2);
         sellRates.put("minecraft:emerald", 7);
         sellRates.put("minecraft:diamond", 13);
         sellGives.put("minecraft:iron_ingot", 1);
         sellGives.put("minecraft:gold_ingot", 1);
+        sellGives.put("minecraft:copper_ingot", 1);
         sellGives.put("minecraft:emerald", 1);
         sellGives.put("minecraft:diamond", 1);
     }
@@ -149,6 +170,20 @@ public class CasinoCraftConfig {
     }
 
     private static void ensureMaps(CasinoCraftConfig cfg) {
+        if (cfg.marketBasePrices == null) cfg.marketBasePrices = new LinkedHashMap<>();
+        if (cfg.marketBasePrices.isEmpty()) {
+            cfg.marketBasePrices.put("minecraft:iron_ingot", 2);
+            cfg.marketBasePrices.put("minecraft:copper_ingot", 2);
+            cfg.marketBasePrices.put("minecraft:gold_ingot", 3);
+            cfg.marketBasePrices.put("minecraft:emerald", 7);
+            cfg.marketBasePrices.put("minecraft:diamond", 13);
+        }
+        if (cfg.goldenTicketTiers == null) cfg.goldenTicketTiers = new ArrayList<>();
+        if (cfg.goldenTicketTiers.isEmpty()) {
+            cfg.goldenTicketTiers.add(GoldenTicketTierConfig.tier5());
+            cfg.goldenTicketTiers.add(GoldenTicketTierConfig.tier10());
+            cfg.goldenTicketTiers.add(GoldenTicketTierConfig.tier20());
+        }
         if (cfg.buyRates == null) cfg.buyRates = new LinkedHashMap<>();
         if (cfg.sellRates == null) cfg.sellRates = new LinkedHashMap<>();
         if (cfg.sellGives == null) cfg.sellGives = new LinkedHashMap<>();
@@ -159,14 +194,17 @@ public class CasinoCraftConfig {
         if (!cfg.buyRates.isEmpty()) return;
         cfg.buyRates.put("minecraft:iron_ingot", 2);
         cfg.buyRates.put("minecraft:gold_ingot", 3);
+        cfg.buyRates.put("minecraft:copper_ingot", 2);
         cfg.buyRates.put("minecraft:emerald", 7);
         cfg.buyRates.put("minecraft:diamond", 13);
         cfg.sellRates.put("minecraft:iron_ingot", 2);
         cfg.sellRates.put("minecraft:gold_ingot", 3);
+        cfg.sellRates.put("minecraft:copper_ingot", 2);
         cfg.sellRates.put("minecraft:emerald", 7);
         cfg.sellRates.put("minecraft:diamond", 13);
         cfg.sellGives.put("minecraft:iron_ingot", 1);
         cfg.sellGives.put("minecraft:gold_ingot", 1);
+        cfg.sellGives.put("minecraft:copper_ingot", 1);
         cfg.sellGives.put("minecraft:emerald", 1);
         cfg.sellGives.put("minecraft:diamond", 1);
     }
@@ -232,6 +270,10 @@ public class CasinoCraftConfig {
         target.xosoPrizeNhat = source.xosoPrizeNhat;
         target.xosoPrizeNhi = source.xosoPrizeNhi;
         target.xosoPrizeBa = source.xosoPrizeBa;
+        if (source.marketBasePrices != null && !source.marketBasePrices.isEmpty())
+            target.marketBasePrices = source.marketBasePrices;
+        if (source.goldenTicketTiers != null && !source.goldenTicketTiers.isEmpty())
+            target.goldenTicketTiers = source.goldenTicketTiers;
         if (source.buyRates != null) target.buyRates = source.buyRates;
         if (source.sellRates != null) target.sellRates = source.sellRates;
         if (source.sellGives != null) target.sellGives = source.sellGives;

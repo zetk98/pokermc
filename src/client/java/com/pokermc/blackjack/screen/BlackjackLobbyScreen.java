@@ -15,9 +15,7 @@ import net.minecraft.util.math.BlockPos;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.pokermc.common.screen.TradeScreen;
-
-/** Blackjack lobby — pink theme, cherry blossom animation. */
+/** Blackjack lobby — pink theme, cherry blossom animation. Use Market block for item ↔ ZC. */
 public class BlackjackLobbyScreen extends Screen {
 
     private record PlayerEntry(String name, int chips, boolean isHost) {}
@@ -69,7 +67,6 @@ public class BlackjackLobbyScreen extends Screen {
 
         int btnW = 120, btnH = 24;
         int btnX = bgX + (BG_W - btnW) / 2;
-        int exchangeY = bgY + 105;
 
         String myName = client.player != null ? client.player.getName().getString() : "";
         boolean alreadyInGame = playerEntries.stream().anyMatch(e -> e.name().equals(myName));
@@ -111,7 +108,6 @@ public class BlackjackLobbyScreen extends Screen {
                             ts.updateState(stateJson);
                         })
                         .dimensions(btnX, bgY + 102, btnW, btnH).build());
-                exchangeY = bgY + 130;
             }
         } else {
             boolean canJoin = bankBalance >= minZcToJoin;
@@ -129,9 +125,6 @@ public class BlackjackLobbyScreen extends Screen {
             addDrawableChild(joinBtn.build()).active = canJoin;
         }
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Exchange"),
-                b -> client.setScreen(new TradeScreen(tablePos, stateJson, true)))
-                .dimensions(btnX, exchangeY, btnW, btnH).build());
     }
 
     private void parseState(String json) {

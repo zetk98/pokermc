@@ -15,6 +15,10 @@ import com.pokermc.blackjack.screen.CreateBlackjackRoomScreen;
 import com.pokermc.poker.screen.CreateRoomScreen;
 import com.pokermc.poker.screen.PokerLobbyScreen;
 import com.pokermc.poker.screen.PokerTableScreen;
+import com.pokermc.goldenticket.network.GoldenTicketNetworking;
+import com.pokermc.goldenticket.screen.GoldenTicketScreen;
+import com.pokermc.market.network.MarketNetworking;
+import com.pokermc.market.screen.MarketScreen;
 import com.pokermc.xoso.network.XosoNetworking;
 import com.pokermc.xoso.screen.XosoTableScreen;
 import com.pokermc.common.screen.TradeScreen;
@@ -63,6 +67,45 @@ public class PokerModClient implements ClientModInitializer {
                         } catch (Exception e) {
                             System.err.println("[CasinoCraft Client] Error: " + e.getMessage());
                             e.printStackTrace();
+                        }
+                    });
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                MarketNetworking.OpenMarketPayload.ID,
+                (payload, context) -> {
+                    context.client().execute(() -> {
+                        try {
+                            MarketScreen screen = new MarketScreen(payload.pos(), payload.stateJson());
+                            context.client().setScreen(screen);
+                            screen.updateState(payload.stateJson());
+                        } catch (Exception e) {
+                            System.err.println("[CasinoCraft] Market error: " + e.getMessage());
+                        }
+                    });
+                }
+        );
+        ClientPlayNetworking.registerGlobalReceiver(
+                MarketNetworking.MarketStatePayload.ID,
+                (payload, context) -> context.client().execute(() -> {
+                    Screen s = context.client().currentScreen;
+                    if (s instanceof MarketScreen ms && ms.getTablePos().equals(payload.pos())) {
+                        ms.updateState(payload.stateJson());
+                    }
+                })
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                GoldenTicketNetworking.OpenGoldenTicketPayload.ID,
+                (payload, context) -> {
+                    context.client().execute(() -> {
+                        try {
+                            GoldenTicketScreen screen = new GoldenTicketScreen(payload.pos(), payload.stateJson());
+                            context.client().setScreen(screen);
+                            screen.updateState(payload.stateJson());
+                        } catch (Exception e) {
+                            System.err.println("[CasinoCraft] Golden Ticket error: " + e.getMessage());
                         }
                     });
                 }
@@ -210,6 +253,8 @@ public class PokerModClient implements ClientModInitializer {
                     else if (s instanceof BangTableScreen bts2) screenPos = bts2.getTablePos();
                     else if (s instanceof BangLobbyScreen bls2) screenPos = bls2.getTablePos();
                     else if (s instanceof XosoTableScreen xts) screenPos = xts.getTablePos();
+                    else if (s instanceof MarketScreen ms) screenPos = ms.getTablePos();
+                    else if (s instanceof GoldenTicketScreen gts) screenPos = gts.getTablePos();
                     else if (s instanceof TradeScreen ts) screenPos = ts.getTablePos();
                     else if (s instanceof CreateRoomScreen crs) screenPos = crs.getTablePos();
                     else if (s instanceof CreateBlackjackRoomScreen cbrs) screenPos = cbrs.getTablePos();

@@ -124,8 +124,8 @@ public class PokerNetworking {
         // Trade items: iron, gold, emerald, diamond (from config; fallback to defaults if empty)
         var trades = TradeConfig.get();
         JsonArray tradeArr = new JsonArray();
-        String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
-        int[] defaultBuy = {2, 3, 7, 13};
+        String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:copper_ingot", "minecraft:emerald", "minecraft:diamond"};
+        int[] defaultBuy = {2, 3, 2, 7, 13};
         for (int i = 0; i < allowed.length; i++) {
             String id = allowed[i];
             int buyRate = trades.buyRates.getOrDefault(id, defaultBuy[i]);
@@ -292,7 +292,7 @@ public class PokerNetworking {
         return true;
     }
 
-    private static final String[] TRADE_ALLOWED = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
+    private static final String[] TRADE_ALLOWED = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:copper_ingot", "minecraft:emerald", "minecraft:diamond"};
 
     /** Buy ZC with items: amount = item count, data = itemId. Only iron, gold, emerald, diamond. */
     private static boolean handleDeposit(PokerTableBlockEntity be, ServerPlayerEntity player, int amount, String itemId) {

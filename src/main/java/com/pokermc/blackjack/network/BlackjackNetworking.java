@@ -109,8 +109,8 @@ public class BlackjackNetworking {
 
         var trades = TradeConfig.get();
         JsonArray tradeArr = new JsonArray();
-        String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
-        int[] defaultBuy = {2, 3, 7, 13};
+        String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:copper_ingot", "minecraft:emerald", "minecraft:diamond"};
+        int[] defaultBuy = {2, 3, 2, 7, 13};
         for (int i = 0; i < allowed.length; i++) {
             String id = allowed[i];
             int buyRate = trades.buyRates.getOrDefault(id, defaultBuy[i]);
@@ -243,7 +243,7 @@ public class BlackjackNetworking {
         return be.getGame().startRound(server);
     }
 
-    private static final String[] TRADE_ALLOWED = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
+    private static final String[] TRADE_ALLOWED = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:copper_ingot", "minecraft:emerald", "minecraft:diamond"};
 
     private static boolean handleDeposit(BlackjackTableBlockEntity be, ServerPlayerEntity player, int amount, String itemId) {
         if (itemId == null || itemId.isEmpty()) return false;
