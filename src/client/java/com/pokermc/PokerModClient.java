@@ -6,6 +6,8 @@ import com.google.gson.JsonParser;
 import com.pokermc.bang.network.BangNetworking;
 import com.pokermc.blackjack.network.BlackjackNetworking;
 import com.pokermc.common.network.CloseGamePayload;
+import com.pokermc.stock.network.StockNetworking;
+import com.pokermc.stock.screen.StockExchangeScreen;
 import com.pokermc.poker.network.PokerNetworking;
 import com.pokermc.bang.screen.BangLobbyScreen;
 import com.pokermc.bang.screen.BangTableScreen;
@@ -241,6 +243,31 @@ public class PokerModClient implements ClientModInitializer {
         );
 
         ClientPlayNetworking.registerGlobalReceiver(
+                StockNetworking.OpenStockExchangePayload.ID,
+                (payload, context) -> {
+                    context.client().execute(() -> {
+                        try {
+                            StockExchangeScreen screen = new StockExchangeScreen(payload.pos(), payload.stateJson());
+                            context.client().setScreen(screen);
+                            screen.updateState(payload.stateJson());
+                        } catch (Exception e) {
+                            System.err.println("[CasinoCraft] Stock Exchange error: " + e.getMessage());
+                        }
+                    });
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                StockNetworking.StockStatePayload.ID,
+                (payload, context) -> context.client().execute(() -> {
+                    Screen s = context.client().currentScreen;
+                    if (s instanceof StockExchangeScreen ses) {
+                        ses.updateState(payload.stateJson());
+                    }
+                })
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
                 CloseGamePayload.ID,
                 (payload, context) -> context.client().execute(() -> {
                     Screen s = context.client().currentScreen;
@@ -254,6 +281,7 @@ public class PokerModClient implements ClientModInitializer {
                     else if (s instanceof BangLobbyScreen bls2) screenPos = bls2.getTablePos();
                     else if (s instanceof XosoTableScreen xts) screenPos = xts.getTablePos();
                     else if (s instanceof MarketScreen ms) screenPos = ms.getTablePos();
+                    else if (s instanceof StockExchangeScreen ses) screenPos = ses.getPos();
                     else if (s instanceof GoldenTicketScreen gts) screenPos = gts.getTablePos();
                     else if (s instanceof TradeScreen ts) screenPos = ts.getTablePos();
                     else if (s instanceof CreateRoomScreen crs) screenPos = crs.getTablePos();

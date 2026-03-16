@@ -39,4 +39,18 @@ public class PokerComponents {
             Identifier.of(PokerMod.MOD_ID, "golden_ticket_tier"),
             ComponentType.<Integer>builder().codec(Codec.INT).build()
     );
+
+    /** Stock ticker symbol (e.g., "ZCOR") stored in StockCertificateItem. */
+    public static final ComponentType<String> STOCK_TICKER = Registry.register(
+            Registries.DATA_COMPONENT_TYPE,
+            Identifier.of(PokerMod.MOD_ID, "stock_ticker"),
+            ComponentType.<String>builder().codec(Codec.STRING).build()
+    );
+
+    /** Number of shares stored in StockCertificateItem. */
+    public static final ComponentType<Integer> STOCK_SHARES = Registry.register(
+            Registries.DATA_COMPONENT_TYPE,
+            Identifier.of(PokerMod.MOD_ID, "stock_shares"),
+            ComponentType.<Integer>builder().codec(Codec.INT).build()
+    );
 }

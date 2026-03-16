@@ -301,7 +301,9 @@ public class PokerGame {
                 statusMessage = playerName + " called " + toCall + ".";
             }
             case RAISE -> {
-                if (players.stream().anyMatch(p -> p.allIn)) return false; // All-in: no raise
+                // Only prevent raise if all remaining non-folded players are all-in (no one can call)
+                long activeNonAllIn = players.stream().filter(p -> !p.folded && !p.allIn).count();
+                if (activeNonAllIn <= 1) return false; // Need at least 2 active players for a raise
                 if (amount < minRaise()) return false;
                 int toCall = currentBet - cur.currentBet;
                 int total = Math.min(toCall + amount, cur.chips);
@@ -320,7 +322,9 @@ public class PokerGame {
                 statusMessage = playerName + " raised to " + currentBet + ".";
             }
             case ALLIN -> {
-                if (players.stream().anyMatch(p -> p.allIn)) return false; // All-in: no all-in
+                // Only prevent all-in if all remaining non-folded players are already all-in
+                long activeNonAllIn = players.stream().filter(p -> !p.folded && !p.allIn).count();
+                if (activeNonAllIn <= 1) return false; // Need at least 2 active players
                 int allInAmt = cur.chips;
                 if (allInAmt <= 0) return false;
                 cur.chips = 0;

@@ -74,7 +74,7 @@ public class BlackjackTableBlockEntity extends BlockEntity {
                     || game.getPhase() == BlackjackGame.Phase.SETTLEMENT) return;
             if (!(world instanceof ServerWorld sw)) return;
 
-        Vec3d tableCenter = Vec3d.ofCenter(pos);
+            Vec3d tableCenter = Vec3d.ofCenter(pos);
         List<String> participants = new ArrayList<>();
         for (BlackjackGame.PlayerState ps : game.getPlayers()) participants.add(ps.name);
         participants.addAll(game.getPendingPlayers());
@@ -121,9 +121,9 @@ public class BlackjackTableBlockEntity extends BlockEntity {
             if (game.getPlayers().isEmpty() && game.getPendingPlayers().isEmpty()) {
                 game.resetWhenEmpty();
             }
-            be.markDirty();
-            BlackjackNetworking.broadcastState(be);
-        }
+                be.markDirty();
+                BlackjackNetworking.broadcastState(be);
+            }
         } catch (Exception e) {
             System.err.println("[CasinoCraft] Blackjack tick error: " + e.getMessage());
         }

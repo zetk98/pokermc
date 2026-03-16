@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "casinocraft:block/stock_exchange" },
+    "facing=south": { "model": "casinocraft:block/stock_exchange", "y": 180 },
+    "facing=west": { "model": "casinocraft:block/stock_exchange", "y": 270 },
+    "facing=east": { "model": "casinocraft:block/stock_exchange", "y": 90 }
+  }
+}

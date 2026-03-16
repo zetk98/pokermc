@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "casinocraft:block/trading_view_table_top_edit",
+    "bottom": "casinocraft:block/blackjack_table_side",
+    "side": "casinocraft:block/blackjack_table_side"
+  }
+}

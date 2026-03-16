@@ -74,6 +74,7 @@ public class LotteryDrawPersistentState extends PersistentState {
             );
 
     public static LotteryDrawPersistentState get(MinecraftServer server) {
+        if (server == null) return null;
         ServerWorld overworld = server.getWorld(World.OVERWORLD);
         if (overworld == null) return null;
         return overworld.getPersistentStateManager().getOrCreate(TYPE);

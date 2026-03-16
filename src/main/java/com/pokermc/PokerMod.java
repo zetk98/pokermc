@@ -4,6 +4,10 @@ import com.pokermc.bang.block.BangTableBlock;
 import com.pokermc.blackjack.block.BlackjackTableBlock;
 import com.pokermc.common.network.CloseGamePayload;
 import com.pokermc.market.block.MarketBlock;
+import com.pokermc.stock.block.StockExchangeBlock;
+import com.pokermc.stock.blockentity.StockExchangeBlockEntity;
+import com.pokermc.stock.item.StockCertificateItem;
+import com.pokermc.stock.network.StockNetworking;
 import com.pokermc.market.blockentity.MarketBlockEntity;
 import com.pokermc.goldenticket.block.GoldenTicketBlock;
 import com.pokermc.goldenticket.blockentity.GoldenTicketBlockEntity;
@@ -59,22 +63,26 @@ public class PokerMod implements ModInitializer {
     public static XosoBlock XOSO_BLOCK;
     public static MarketBlock MARKET_BLOCK;
     public static GoldenTicketBlock GOLDEN_TICKET_BLOCK;
+    public static StockExchangeBlock STOCK_EXCHANGE_BLOCK;
     public static BlockItem POKER_TABLE_ITEM;
     public static BlockItem BLACKJACK_TABLE_ITEM;
     public static BlockItem BANG_TABLE_ITEM;
     public static BlockItem XOSO_TABLE_ITEM;
     public static BlockItem MARKET_TABLE_ITEM;
     public static BlockItem GOLDEN_TICKET_TABLE_ITEM;
+    public static BlockItem STOCK_EXCHANGE_ITEM;
     public static ZCoinItem ZCOIN_ITEM;
     public static ZCoinBagItem ZCOIN_BAG_ITEM;
     public static LotteryTicketItem LOTTERY_TICKET_ITEM;
     public static GoldenTicketItem GOLDEN_TICKET_ITEM;
+    public static StockCertificateItem STOCK_CERTIFICATE_ITEM;
     public static BlockEntityType<PokerTableBlockEntity> POKER_TABLE_BLOCK_ENTITY;
     public static BlockEntityType<BlackjackTableBlockEntity> BLACKJACK_TABLE_BLOCK_ENTITY;
     public static BlockEntityType<BangTableBlockEntity> BANG_TABLE_BLOCK_ENTITY;
     public static BlockEntityType<XosoBlockEntity> XOSO_BLOCK_ENTITY;
     public static BlockEntityType<MarketBlockEntity> MARKET_BLOCK_ENTITY;
     public static BlockEntityType<GoldenTicketBlockEntity> GOLDEN_TICKET_BLOCK_ENTITY;
+    public static BlockEntityType<StockExchangeBlockEntity> STOCK_EXCHANGE_BLOCK_ENTITY;
 
     private static <T extends Block> T registerBlock(String name, T block, boolean withItem) {
         RegistryKey<Block> blockKey = RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, name));
@@ -154,6 +162,15 @@ public class PokerMod implements ModInitializer {
                 true);
         GOLDEN_TICKET_TABLE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "golden_ticket_table"));
 
+        STOCK_EXCHANGE_BLOCK = registerBlock("stock_exchange", new StockExchangeBlock(
+                AbstractBlock.Settings.create()
+                        .mapColor(MapColor.DIAMOND_BLUE)
+                        .strength(2.5f)
+                        .nonOpaque()
+                        .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "stock_exchange")))),
+                true);
+        STOCK_EXCHANGE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "stock_exchange"));
+
         ZCOIN_ITEM = Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin"),
                 new ZCoinItem(new Item.Settings().maxCount(64)
                         .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin")))
@@ -170,6 +187,10 @@ public class PokerMod implements ModInitializer {
                 new GoldenTicketItem(new Item.Settings().maxCount(64)
                         .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "golden_ticket")))
                         .component(DataComponentTypes.ITEM_MODEL, Identifier.of(MOD_ID, "item/golden_ticket"))));
+        STOCK_CERTIFICATE_ITEM = Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "stock_certificate"),
+                new StockCertificateItem(new Item.Settings().maxCount(64)
+                        .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "stock_certificate")))
+                        .component(DataComponentTypes.ITEM_MODEL, Identifier.of(MOD_ID, "item/stock_certificate"))));
 
         // Register block entity type using vanilla builder (no deprecated Fabric wrapper)
         POKER_TABLE_BLOCK_ENTITY = Registry.register(
@@ -201,6 +222,11 @@ public class PokerMod implements ModInitializer {
                 Registries.BLOCK_ENTITY_TYPE,
                 Identifier.of(MOD_ID, "golden_ticket_table"),
                 net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(GoldenTicketBlockEntity::new, GOLDEN_TICKET_BLOCK).build()
+        );
+        STOCK_EXCHANGE_BLOCK_ENTITY = Registry.register(
+                Registries.BLOCK_ENTITY_TYPE,
+                Identifier.of(MOD_ID, "stock_exchange"),
+                net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(StockExchangeBlockEntity::new, STOCK_EXCHANGE_BLOCK).build()
         );
 
         // Register S2C custom payloads
@@ -243,6 +269,12 @@ public class PokerMod implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(
                 com.pokermc.common.network.CloseScreenPayload.ID,
                 com.pokermc.common.network.CloseScreenPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                StockNetworking.OpenStockExchangePayload.ID,
+                StockNetworking.OpenStockExchangePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                StockNetworking.StockStatePayload.ID,
+                StockNetworking.StockStatePayload.CODEC);
 
         // Register C2S custom payloads
         PayloadTypeRegistry.playC2S().register(
@@ -266,6 +298,9 @@ public class PokerMod implements ModInitializer {
         PayloadTypeRegistry.playC2S().register(
                 MarketNetworking.RequestMarketRefreshPayload.ID,
                 MarketNetworking.RequestMarketRefreshPayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(
+                StockNetworking.StockActionPayload.ID,
+                StockNetworking.StockActionPayload.CODEC);
 
         // Handle incoming C2S player actions on the server
         ServerPlayNetworking.registerGlobalReceiver(
@@ -310,6 +345,12 @@ public class PokerMod implements ModInitializer {
                         () -> MarketNetworking.handleRefreshRequest(context.player(), payload)
                 )
         );
+        ServerPlayNetworking.registerGlobalReceiver(
+                StockNetworking.StockActionPayload.ID,
+                (payload, context) -> context.server().execute(
+                        () -> StockNetworking.handleAction(context.player(), payload)
+                )
+        );
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(CommandManager.literal("day").executes(context -> {
@@ -338,6 +379,8 @@ public class PokerMod implements ModInitializer {
                             entries.add(MARKET_TABLE_ITEM);
                             entries.add(GOLDEN_TICKET_TABLE_ITEM);
                             entries.add(GOLDEN_TICKET_ITEM);
+                            entries.add(STOCK_EXCHANGE_ITEM);
+                            entries.add(STOCK_CERTIFICATE_ITEM);
                         })
                         .build());
 

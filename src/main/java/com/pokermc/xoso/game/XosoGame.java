@@ -21,6 +21,9 @@ import java.util.*;
  */
 public class XosoGame {
 
+    /** Dedicated lock for lottery draw synchronization */
+    private static final Object DRAW_LOCK = new Object();
+
     /** 10 minutes = 12000 ticks (20 TPS) */
     private static final long TICKS_PER_DRAW = 12000L;
 
@@ -93,7 +96,7 @@ public class XosoGame {
         boolean changed = false;
         while (lastDrawPeriod < currentPeriod) {
             long drawPeriod = lastDrawPeriod + 1;
-            synchronized (LotteryDrawStorage.class) {
+            synchronized (DRAW_LOCK) {
                 var existing = LotteryDrawStorage.get(server, drawPeriod);
                 if (existing != null) {
                     resultSpecial = existing.special();

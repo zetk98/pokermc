@@ -22,7 +22,7 @@ public class ZCoinStorage {
             ItemStack stack = inv.getStack(i);
             if (stack.getItem() == PokerMod.ZCOIN_ITEM) {
                 total += stack.getCount();
-            } else             if (stack.getItem() == PokerMod.ZCOIN_BAG_ITEM) {
+            } else if (stack.getItem() == PokerMod.ZCOIN_BAG_ITEM) {
                 total += com.pokermc.common.item.ZCoinBagItem.getBalance(stack); // sums ZCoin in slots
             }
         }

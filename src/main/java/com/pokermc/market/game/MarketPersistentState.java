@@ -146,6 +146,7 @@ public class MarketPersistentState extends PersistentState {
             new PersistentStateType<>(PokerMod.MOD_ID + "_market", MarketPersistentState::new, CODEC, DataFixTypes.LEVEL);
 
     public static MarketPersistentState get(MinecraftServer server) {
+        if (server == null) return null;
         ServerWorld ow = server.getWorld(World.OVERWORLD);
         if (ow == null) return null;
         return ow.getPersistentStateManager().getOrCreate(TYPE);
