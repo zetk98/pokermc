@@ -17,9 +17,9 @@ import java.util.*;
  */
 public class StockMarketGame {
 
-    /** Update prices every 10 minutes (12000 ticks at 20 TPS) */
-    private static final long TICKS_PER_UPDATE = 12000L;
-    private static final int PRICE_HISTORY_SIZE = 24; // Keep 24 hours of history
+    /** Update prices every 5 seconds (100 ticks at 20 TPS) for real-time trading */
+    private static final long TICKS_PER_UPDATE = 100L;
+    private static final int PRICE_HISTORY_SIZE = 10; // Keep 10 hours of history (10 bars)
 
     /** Current price for each stock */
     private final Map<StockType, StockPrice> currentPrices = new HashMap<>();
@@ -203,7 +203,7 @@ public class StockMarketGame {
 
         StockPrice price = currentPrices.get(stockType);
         int totalCost = price.price * quantity;
-        int fee = calculateFee(totalCost, 0.005f); // 0.5% fee for market orders
+        int fee = calculateFee(totalCost, 0.01f); // 1% fee for all orders
         int totalWithFee = totalCost + fee;
 
         if (ZCoinStorage.getBalance(player) < totalWithFee) {
@@ -247,7 +247,7 @@ public class StockMarketGame {
 
         StockPrice price = currentPrices.get(stockType);
         int totalValue = price.price * quantity;
-        int fee = calculateFee(totalValue, 0.005f); // 0.5% fee
+        int fee = calculateFee(totalValue, 0.01f); // 1% fee
         int netValue = totalValue - fee;
 
         // Remove from portfolio

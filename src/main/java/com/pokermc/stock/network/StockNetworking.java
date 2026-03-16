@@ -2,6 +2,7 @@ package com.pokermc.stock.network;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.pokermc.PokerMod;
 import com.pokermc.stock.blockentity.StockExchangeBlockEntity;
@@ -99,6 +100,9 @@ public class StockNetworking {
         root.addProperty("lastUpdate", game.getLastUpdateTick());
         root.addProperty("currentTime", worldTime);
 
+        // Player balance
+        root.addProperty("playerBalance", com.pokermc.common.config.ZCoinStorage.getBalance(viewer));
+
         // Market event
         JsonObject event = new JsonObject();
         event.addProperty("name", game.getCurrentEvent().name());
@@ -117,6 +121,17 @@ public class StockNetworking {
             prices.add(entry.getKey().getTicker(), priceData);
         }
         root.add("prices", prices);
+
+        // Price history for each stock (24 hours)
+        JsonObject history = new JsonObject();
+        for (Map.Entry<StockType, List<Integer>> entry : game.getPriceHistory().entrySet()) {
+            JsonArray histArray = new JsonArray();
+            for (Integer price : entry.getValue()) {
+                histArray.add(price);
+            }
+            history.add(entry.getKey().getTicker(), histArray);
+        }
+        root.add("history", history);
 
         // Player portfolio
         JsonObject portfolio = new JsonObject();

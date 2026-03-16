@@ -27,7 +27,17 @@ public enum StockType {
     ENDR("ENDR", "Ender Investments", 250, Tier.HIGH_RISK, Formatting.DARK_PURPLE),
     BLAZE("BLAZE", "Blaze Power Plant", 180, Tier.HIGH_RISK, Formatting.GOLD),
     GHAST("GHAST", "Ghast Transport", 75, Tier.HIGH_RISK, Formatting.LIGHT_PURPLE),
-    WITHE("WITHE", "Wither Skull Co", 300, Tier.HIGH_RISK, Formatting.DARK_GRAY);
+    WITHE("WITHE", "Wither Skull Co", 300, Tier.HIGH_RISK, Formatting.DARK_GRAY),
+
+    // ===== CRYPTO (Very High Volatility, Real-world inspired) =====
+    BTC("BTC", "Bitcoin", 50000, Tier.CRYPTO, Formatting.GOLD),
+    ETH("ETH", "Ethereum", 3000, Tier.CRYPTO, Formatting.LIGHT_PURPLE),
+    BNB("BNB", "Binance Coin", 500, Tier.CRYPTO, Formatting.YELLOW),
+    SOL("SOL", "Solana", 150, Tier.CRYPTO, Formatting.DARK_PURPLE),
+    ADA("ADA", "Cardano", 50, Tier.CRYPTO, Formatting.BLUE),
+    DOGE("DOGE", "Dogecoin", 10, Tier.CRYPTO, Formatting.GOLD),
+    XRP("XRP", "Ripple", 60, Tier.CRYPTO, Formatting.AQUA),
+    DOT("DOT", "Polkadot", 40, Tier.CRYPTO, Formatting.RED);
 
     private final String ticker;
     private final String displayName;
@@ -62,7 +72,8 @@ public enum StockType {
     public enum Tier {
         LOW_RISK("Blue Chip", 2, 5, 0.98f, 1.02f),
         MEDIUM_RISK("Growth", 5, 15, 0.95f, 1.05f),
-        HIGH_RISK("High Risk", 10, 30, 0.90f, 1.10f);
+        HIGH_RISK("High Risk", 10, 30, 0.90f, 1.10f),
+        CRYPTO("Crypto", 15, 50, 0.80f, 1.20f);  // Very high volatility
 
         private final String displayName;
         private final int minChangePercent;      // Minimum daily change
