@@ -17,8 +17,6 @@ import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
 
-import java.util.Map;
-
 public class BlackjackNetworking {
 
     private static final Gson GSON = new Gson();
@@ -112,14 +110,17 @@ public class BlackjackNetworking {
         var trades = TradeConfig.get();
         JsonArray tradeArr = new JsonArray();
         String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
-        for (String id : allowed) {
-            if (!trades.buyRates.containsKey(id)) continue;
-            Map.Entry<String, Integer> e = Map.entry(id, trades.buyRates.get(id));
+        int[] defaultBuy = {2, 3, 7, 13};
+        for (int i = 0; i < allowed.length; i++) {
+            String id = allowed[i];
+            int buyRate = trades.buyRates.getOrDefault(id, defaultBuy[i]);
+            int sellRate = trades.sellRates.getOrDefault(id, buyRate);
+            int sellGives = trades.sellGives.getOrDefault(id, 1);
             JsonObject to = new JsonObject();
-            to.addProperty("id", e.getKey());
-            to.addProperty("buyRate", e.getValue());
-            to.addProperty("sellRate", trades.sellRates.getOrDefault(e.getKey(), e.getValue()));
-            to.addProperty("sellGives", trades.sellGives.getOrDefault(id, 1));
+            to.addProperty("id", id);
+            to.addProperty("buyRate", buyRate);
+            to.addProperty("sellRate", sellRate);
+            to.addProperty("sellGives", sellGives);
             tradeArr.add(to);
         }
         root.add("tradeItems", tradeArr);

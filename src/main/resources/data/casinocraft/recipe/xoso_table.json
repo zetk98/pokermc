@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "L": "minecraft:lime_wool",
+    "W": "minecraft:oak_planks"
+  },
+  "pattern": [
+    "LLL",
+    "L L",
+    "W W"
+  ],
+  "result": {
+    "count": 1,
+    "id": "casinocraft:xoso_table"
+  }
+}

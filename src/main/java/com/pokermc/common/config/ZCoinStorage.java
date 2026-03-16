@@ -29,15 +29,16 @@ public class ZCoinStorage {
         return total;
     }
 
-    /** Add ZCoin to player. Prefers bags, then gives loose coins. */
+    /** Add ZCoin to player. Prefers bags, then gives loose coins. Returns amount actually added (may drop if full). */
     public static boolean add(ServerPlayerEntity player, int amount) {
         if (amount <= 0) return true;
         int remaining = amount;
+        int dropped = 0;
 
         for (int i = 0; i < player.getInventory().size() && remaining > 0; i++) {
             ItemStack stack = player.getInventory().getStack(i);
             if (stack.getItem() == PokerMod.ZCOIN_BAG_ITEM) {
-                int space = com.pokermc.common.item.ZCoinBagItem.getMaxCapacity() - com.pokermc.common.item.ZCoinBagItem.getBalance(stack);
+                int space = com.pokermc.common.item.ZCoinBagItem.getAvailableSpace(stack);
                 int add = Math.min(remaining, space);
                 if (add > 0) {
                     com.pokermc.common.item.ZCoinBagItem.addBalance(stack, add);
@@ -51,8 +52,12 @@ public class ZCoinStorage {
             ItemStack coins = new ItemStack(PokerMod.ZCOIN_ITEM, give);
             if (!player.getInventory().insertStack(coins)) {
                 player.dropItem(coins, false);
+                dropped += give;
             }
             remaining -= give;
+        }
+        if (dropped > 0) {
+            player.sendMessage(net.minecraft.text.Text.literal("§e[Túi đầy!] §f" + dropped + " ZC rơi xuống đất - nhặt lên!"), true);
         }
         return true;
     }

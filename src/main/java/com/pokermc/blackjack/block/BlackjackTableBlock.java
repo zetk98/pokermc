@@ -2,6 +2,7 @@ package com.pokermc.blackjack.block;
 
 import com.mojang.serialization.MapCodec;
 import com.pokermc.blackjack.blockentity.BlackjackTableBlockEntity;
+import com.pokermc.common.network.CloseGamePayload;
 import net.minecraft.block.*;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityTicker;
@@ -42,10 +43,14 @@ public class BlackjackTableBlock extends BlockWithEntity {
     @Override
     @SuppressWarnings("deprecation")
     protected void onStateReplaced(BlockState state, net.minecraft.server.world.ServerWorld world, BlockPos pos, boolean moved) {
+        if (!moved) {
+            BlockEntity be = world.getBlockEntity(pos);
+            if (be instanceof BlackjackTableBlockEntity table) {
+                CloseGamePayload.sendToAll(table.getViewers(), pos);
+                table.refundAllPlayers();
+            }
+        }
         super.onStateReplaced(state, world, pos, moved);
-        if (moved) return;
-        BlockEntity be = world.getBlockEntity(pos);
-        if (be instanceof BlackjackTableBlockEntity table) table.refundAllPlayers();
     }
 
     @Override

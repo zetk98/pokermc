@@ -22,6 +22,7 @@ public class BangTableBlockEntity extends BlockEntity {
 
     private final BangGame game = new BangGame();
     private final Set<ServerPlayerEntity> viewers = new LinkedHashSet<>();
+    private int stateSequence = 0; // Monotonic; client ignores stale packets
     private int dealTickCounter = 0;
     private int jailCheckTicks = 0;
     private int jailSkipDelayTicks = 0;
@@ -63,7 +64,8 @@ public class BangTableBlockEntity extends BlockEntity {
         try {
             PLAYER_OPEN_TABLE.put(uuid, pos);
             viewers.add(player);
-            String json = BangNetworking.serializeState(game, player);
+            stateSequence++;
+            String json = BangNetworking.serializeState(game, player, stateSequence);
             net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
                     player, new BangNetworking.OpenBangPayload(pos, json));
         } catch (Exception e) {
@@ -85,6 +87,24 @@ public class BangTableBlockEntity extends BlockEntity {
 
         if (game.getPhase() == BangGame.Phase.ROLE_REVEAL) {
             game.tickRoleReveal();
+            be.markDirty();
+            BangNetworking.broadcastState(be);
+            return;
+        }
+        if (game.getPhase() == BangGame.Phase.ROLE_TO_CHARACTER_DELAY) {
+            game.tickRoleToCharacterDelay();
+            be.markDirty();
+            BangNetworking.broadcastState(be);
+            return;
+        }
+        if (game.getPhase() == BangGame.Phase.CHARACTER_SELECT) {
+            game.tickCharacterSelect();
+            be.markDirty();
+            BangNetworking.broadcastState(be);
+            return;
+        }
+        if (game.getPhase() == BangGame.Phase.CHARACTER_TO_DEAL_DELAY) {
+            game.tickCharacterToDealDelay();
             be.markDirty();
             BangNetworking.broadcastState(be);
             return;
@@ -147,6 +167,18 @@ public class BangTableBlockEntity extends BlockEntity {
             }
             return;
         }
+        if (game.getPhase() == BangGame.Phase.KIT_DISCARD) {
+            game.tickKitDiscard();
+            be.markDirty();
+            BangNetworking.broadcastState(be);
+            return;
+        }
+        if (game.getPhase() == BangGame.Phase.DRAW_CHOICE) {
+            game.tickDrawChoice();
+            be.markDirty();
+            BangNetworking.broadcastState(be);
+            return;
+        }
         if (game.getPhase() == BangGame.Phase.DYNAMITE_CHECK) {
             be.dealTickCounter++;
             if (be.dealTickCounter >= BangGame.DEAL_TICKS_PER_CARD) {
@@ -159,21 +191,38 @@ public class BangTableBlockEntity extends BlockEntity {
             return;
         }
 
-        // Proximity check
+        // Proximity check: khi bất kỳ ai quá xa → toàn bộ out bàn
         if (world instanceof net.minecraft.server.world.ServerWorld sw && game.getPhase() != BangGame.Phase.WAITING) {
             Vec3d center = Vec3d.ofCenter(pos);
+            boolean anyoneTooFar = false;
             for (BangGame.PlayerState ps : game.getPlayers()) {
                 ServerPlayerEntity sp = sw.getServer().getPlayerManager().getPlayer(ps.name);
                 if (sp != null && sp.getSyncedPos().distanceTo(center) > MAX_DISTANCE) {
-                    game.removePlayer(ps.name);
-                    be.viewers.removeIf(p -> p.getName().getString().equals(ps.name));
-                    be.clearPlayerTable(sp.getUuid());
-                    be.markDirty();
-                    BangNetworking.broadcastState(be);
+                    anyoneTooFar = true;
+                    break;
                 }
+            }
+            if (anyoneTooFar) {
+                var toRemove = new java.util.ArrayList<>(game.getPlayers().stream().map(p -> p.name).toList());
+                for (String name : toRemove) {
+                    game.removePlayer(name);
+                    be.viewers.removeIf(p -> p.getName().getString().equals(name));
+                    var sp = sw.getServer().getPlayerManager().getPlayer(name);
+                    if (sp != null) {
+                        be.clearPlayerTable(sp.getUuid());
+                        sp.sendMessage(net.minecraft.text.Text.literal("§6[Bang] §fBàn đóng (có người quá xa)."), true);
+                    }
+                }
+                be.markDirty();
+                BangNetworking.broadcastState(be);
             }
         }
     }
 
     public BangGame getGame() { return game; }
+
+    /** Increment and return state sequence. Client ignores packets with older sequence. */
+    public int incrementAndGetStateSequence() {
+        return ++stateSequence;
+    }
 }

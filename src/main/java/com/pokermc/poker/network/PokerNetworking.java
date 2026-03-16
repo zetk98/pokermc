@@ -83,6 +83,7 @@ public class PokerNetworking {
         root.addProperty("lastPotWon",      game.getLastPotWon());
         root.addProperty("status",          game.getStatusMessage());
         root.addProperty("betLevel",        game.getBetLevel());
+        root.addProperty("minRaiseAmount",  PokerConfig.get().minRaiseAmount);
         root.addProperty("dealerIndex",     game.getDealerIndex());
         root.addProperty("isEmpty",         game.getPlayers().isEmpty()
                                          && game.getPendingPlayers().isEmpty());
@@ -120,17 +121,21 @@ public class PokerNetworking {
         // Per-viewer ZCoin balance (from inventory)
         root.addProperty("bankBalance", ZCoinStorage.getBalance(viewer));
 
-        // Trade items: only iron, gold, emerald, diamond
+        // Trade items: iron, gold, emerald, diamond (from config; fallback to defaults if empty)
         var trades = TradeConfig.get();
         JsonArray tradeArr = new JsonArray();
         String[] allowed = {"minecraft:iron_ingot", "minecraft:gold_ingot", "minecraft:emerald", "minecraft:diamond"};
-        for (String id : allowed) {
-            if (!trades.buyRates.containsKey(id)) continue;
+        int[] defaultBuy = {2, 3, 7, 13};
+        for (int i = 0; i < allowed.length; i++) {
+            String id = allowed[i];
+            int buyRate = trades.buyRates.getOrDefault(id, defaultBuy[i]);
+            int sellRate = trades.sellRates.getOrDefault(id, buyRate);
+            int sellGives = trades.sellGives.getOrDefault(id, 1);
             JsonObject to = new JsonObject();
             to.addProperty("id", id);
-            to.addProperty("buyRate", trades.buyRates.get(id));
-            to.addProperty("sellRate", trades.sellRates.getOrDefault(id, trades.buyRates.get(id)));
-            to.addProperty("sellGives", trades.sellGives.getOrDefault(id, 1));
+            to.addProperty("buyRate", buyRate);
+            to.addProperty("sellRate", sellRate);
+            to.addProperty("sellGives", sellGives);
             tradeArr.add(to);
         }
         root.add("tradeItems", tradeArr);

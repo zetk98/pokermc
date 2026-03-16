@@ -23,6 +23,7 @@ public class BangLobbyScreen extends Screen {
     private static final int C_GOLD = 0xFFFFD700, C_WHITE = 0xFFFFFFFF, C_GRAY = 0xFF888888, C_ORANGE = 0xFFFF8844;
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private String stateJson = "{}";
     private final List<String> playerNames = new ArrayList<>();
     private boolean isEmpty = true;

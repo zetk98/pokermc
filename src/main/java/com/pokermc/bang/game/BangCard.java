@@ -60,6 +60,16 @@ public record BangCard(String typeId, String rankSuit) {
         return rankSuit != null && rankSuit.endsWith("H");
     }
 
+    /** Diamonds suit (Rô) - last char D. */
+    public boolean isDiamonds() {
+        return rankSuit != null && rankSuit.endsWith("D");
+    }
+
+    /** Hearts or Diamonds (for Black Jack character). */
+    public boolean isHeartsOrDiamonds() {
+        return isHearts() || isDiamonds();
+    }
+
     /** Spades 2-9 (Bích 2-9) for Dynamite. */
     public boolean isSpades2to9() {
         if (rankSuit == null || !rankSuit.endsWith("S")) return false;

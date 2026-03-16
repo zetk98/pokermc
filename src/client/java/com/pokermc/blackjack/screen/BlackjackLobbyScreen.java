@@ -34,6 +34,7 @@ public class BlackjackLobbyScreen extends Screen {
     private static final int C_MAGENTA = 0xFFCC66AA;
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private String stateJson = "{}";
     private int framesOpen = 0;
     private final List<PlayerEntry> playerEntries = new ArrayList<>();

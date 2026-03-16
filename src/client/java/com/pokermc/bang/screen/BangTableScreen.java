@@ -2,6 +2,7 @@ package com.pokermc.bang.screen;
 
 import com.google.gson.*;
 import com.pokermc.bang.game.BangCard;
+import com.pokermc.bang.game.BangCharacter;
 import com.pokermc.common.screen.CardAnimationHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -33,6 +34,8 @@ public class BangTableScreen extends Screen {
     private static final int TEX_CARD_W = 22, TEX_CARD_H = 32;
     private static final int C_GOLD = 0xFFFFD700, C_WHITE = 0xFFFFFFFF, C_GRAY = 0xFF888888;
     private static final int C_ORANGE = 0xFFFF8844, C_RED = 0xFFFF4444, C_GREEN = 0xFF55CC55;
+    /** Vẽ hitbox debug màu đỏ cho các vùng có thể tương tác (lá bài, panel, ô trang bị). */
+    private static final boolean DEBUG_HITBOX = false;
     private static final int SLOT_RED = 0xCCAA2222, SLOT_BLUE = 0xCC2222AA, SLOT_GREEN = 0xCC22AA22, SLOT_YELLOW = 0xCCAAAA22;
 
     private static final String BANG_TEX_SPLIT = "textures/cards/split/";
@@ -41,6 +44,7 @@ public class BangTableScreen extends Screen {
     private static final int MAX_EQUIP_SLOTS = 4;
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private String stateJson = "{}";
     private String phase = "WAITING";
     private String statusMessage = "";
@@ -56,6 +60,14 @@ public class BangTableScreen extends Screen {
     private int dynamitePlayerIndex = -1;
     private int jailPlayerIndex = -1;
     private String gameOverWinner = "";
+    private int characterSelectTicks = 0;
+    private final List<String> kitCarlsonCards = new ArrayList<>();
+    private final Set<Integer> selectedKitCarlsonIndices = new HashSet<>();
+    private boolean canUseJourdonnais = false;
+    private int drawChoiceCharacter = 0;
+    private int[] characterSelectOptions = new int[0];
+    private int selectedCharacterOption = -1; // 0,1,2 for CHARACTER_SELECT
+    private int lastStateSequence = -1; // Ignore stale packets
     private final List<String> logEntries = new ArrayList<>();
     private static final int LOG_W = 152, LOG_H = 54;
     private int deckCount = 0;
@@ -100,7 +112,7 @@ public class BangTableScreen extends Screen {
     private static final long ROLE_REVEAL_DURATION_MS = 2500;
     private static final long ROLE_ANIM_DURATION_MS = 600;
 
-    private record PlayerInfo(String name, int seatIndex, String role, int maxHp, int hp,
+    private record PlayerInfo(String name, int seatIndex, String role, int characterId, int maxHp, int hp,
                               boolean isAlive, List<String> hand, List<String> equipment) {}
 
     public BangTableScreen(BlockPos pos, String initialJson) {
@@ -152,7 +164,7 @@ public class BangTableScreen extends Screen {
     private void updateButtons() {
         if (btnLeave == null) return;
         boolean waiting = "WAITING".equals(phase);
-        boolean playing = "PLAYING".equals(phase) || "DISCARD".equals(phase) || "ROLE_REVEAL".equals(phase) || "DEALING".equals(phase) || "DEAL_PAUSE".equals(phase) || "DEAL_FIRST".equals(phase);
+        boolean playing = "PLAYING".equals(phase) || "DISCARD".equals(phase) || "KIT_DISCARD".equals(phase) || "DRAW_CHOICE".equals(phase) || "ROLE_REVEAL".equals(phase) || "ROLE_TO_CHARACTER_DELAY".equals(phase) || "CHARACTER_SELECT".equals(phase) || "CHARACTER_TO_DEAL_DELAY".equals(phase) || "DEALING".equals(phase) || "DEAL_PAUSE".equals(phase) || "DEAL_FIRST".equals(phase);
         boolean reacting = "REACTING".equals(phase) || "GATLING_REACT".equals(phase);
         boolean indiansReacting = "INDIANS_REACT".equals(phase);
         boolean isOwner = !players.isEmpty() && players.get(0).name.equals(myName);
@@ -161,6 +173,7 @@ public class BangTableScreen extends Screen {
         boolean isReactingToIndians = indiansReacting && reactingTarget.equals(myName);
         boolean isChoosing = "CHOOSE_CARD".equals(phase) && myName.equals(chooseTarget);
         boolean isDuelMyTurn = "DUEL_PLAY".equals(phase) && myName.equals(duelCurrentPlayer);
+        boolean isCharacterSelectMyTurn = "CHARACTER_SELECT".equals(phase) && characterSelectOptions.length > 0;
 
         boolean isGameOver = "GAME_OVER".equals(phase);
         btnNewGame.visible = isGameOver;
@@ -174,7 +187,8 @@ public class BangTableScreen extends Screen {
         int handLimit = hero != null ? Math.max(1, hero.hp) : 5; // limit = số máu hiện tại
         boolean overLimit = hero != null && hero.hand.size() > handLimit;
         boolean inDiscardPhase = "DISCARD".equals(phase) && isMyTurn;
-        boolean canDiscardNow = isMyTurn && overLimit; // nút discard hoạt động ngay khi hand > limit
+        boolean isKitCarlson = "KIT_DISCARD".equals(phase) && isMyTurn && kitCarlsonCards.size() == 3;
+        boolean canDiscardNow = (isMyTurn && overLimit);
         boolean canEndTurn = (playing && isMyTurn && ("PLAYING".equals(phase) || inDiscardPhase) && !overLimit);
         btnEndTurn.visible = !isGameOver;
         btnEndTurn.active = canEndTurn && !isGameOver;
@@ -187,15 +201,22 @@ public class BangTableScreen extends Screen {
         boolean selIsMissed = hasSelection && hero != null && isSelectedMissedOrBeer(hero);
         boolean selNeedsTarget = hasSelection && isMyTurn && hero != null && isSelectedNeedsTarget(hero);
         boolean canDiscard = canDiscardNow && hasSelection;
+        boolean canKitCarlsonOk = isKitCarlson && selectedKitCarlsonIndices.size() == 2;
         boolean reactionLocked = (System.currentTimeMillis() - lastReactionSendTime) < 300;
-        boolean canPlay = reactionLocked ? false : ((isMyTurn && hasSelection && !selNeedsTarget) || isReacting || isReactingToIndians || hasChooseSelection || isDuelMyTurn || (isReacting && canUseBarrel));
+        boolean isSidHeal = isMyTurn && hero != null && hero.characterId == 14 && hero.hp < hero.maxHp && selectedCardIndices.size() == 2;
+        boolean isDrawChoice = "DRAW_CHOICE".equals(phase) && isMyTurn;
+        boolean canPlay = reactionLocked ? false : ((isMyTurn && hasSelection && !selNeedsTarget) || isReacting || isReactingToIndians || hasChooseSelection || isDuelMyTurn || (isReacting && (canUseBarrel || canUseJourdonnais)) || (isCharacterSelectMyTurn && selectedCharacterOption >= 0) || (isKitCarlson && selectedKitCarlsonIndices.size() == 2) || isSidHeal || (isDrawChoice && drawChoiceCharacter > 0));
         btnPlay.visible = !isGameOver;
-        btnPlay.active = canPlay && !isGameOver;
+        btnPlay.active = (canPlay || canKitCarlsonOk) && !isGameOver;
         if (btnDiscard != null) {
             btnDiscard.visible = !isGameOver;
             btnDiscard.active = canDiscard && !isGameOver;
         }
-        String playLabel = isChoosing ? BangLang.tr("Choose card", "Chọn lá")
+        String playLabel = isKitCarlson ? BangLang.tr("OK", "Xác nhận")
+                : isCharacterSelectMyTurn ? BangLang.tr("OK", "Xác nhận")
+                : isSidHeal ? BangLang.tr("Sid Heal", "Sid Hồi máu")
+                : isDrawChoice ? BangLang.tr("Draw 2", "Rút 2")
+                : isChoosing ? BangLang.tr("Choose card", "Chọn lá")
                 : isReactingToIndians ? (selIsBang ? BangLang.tr("Play Bang", "Đánh Bang") : BangLang.tr("Take hit", "Nhận đạn"))
                 : isReacting ? (canUseBarrel && !hasSelection ? BangLang.tr("Use Barrel", "Dùng Barrel") : selIsMissed ? BangLang.tr("Use Miss", "Dùng Miss") : BangLang.tr("Take hit", "Nhận đạn"))
                 : isDuelMyTurn ? (selIsBang ? BangLang.tr("Bang", "Bang") : BangLang.tr("Pass", "Bỏ qua"))
@@ -241,7 +262,9 @@ public class BangTableScreen extends Screen {
         int idx = selectedCardIndices.iterator().next();
         if (idx >= hero.hand.size()) return false;
         BangCard c = BangCard.fromCode(hero.hand.get(idx));
-        return c != null && BangCard.BANG.equals(c.typeId());
+        if (c == null) return false;
+        if (BangCard.BANG.equals(c.typeId())) return true;
+        return hero.characterId == 4 && BangCard.MISSED.equals(c.typeId()); // Calamity Janet: Miss as Bang
     }
 
     private boolean isSelectedMissedOrBeer(PlayerInfo hero) {
@@ -287,7 +310,15 @@ public class BangTableScreen extends Screen {
     private void playSelectedCards() {
         PlayerInfo hero = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
         if (hero == null) return;
-        boolean isMyTurn = myName.equals(currentPlayerName) && ("PLAYING".equals(phase) || "DISCARD".equals(phase));
+        boolean isMyTurn = myName.equals(currentPlayerName) && ("PLAYING".equals(phase) || "DISCARD".equals(phase) || "KIT_DISCARD".equals(phase) || "DRAW_CHOICE".equals(phase));
+        boolean isKitCarlson = "KIT_DISCARD".equals(phase) && isMyTurn && kitCarlsonCards.size() == 3;
+        if (isKitCarlson && selectedKitCarlsonIndices.size() == 2) {
+            var it = selectedKitCarlsonIndices.iterator();
+            int i1 = it.next(), i2 = it.next();
+            sendAction("KIT_CARLSON_PICK", 0, i1 + "," + i2);
+            selectedKitCarlsonIndices.clear();
+            return;
+        }
         boolean isReacting = ("REACTING".equals(phase) || "GATLING_REACT".equals(phase)) && myName.equals(reactingTarget);
         boolean isReactingToIndians = "INDIANS_REACT".equals(phase) && myName.equals(reactingTarget);
         boolean isChoosing = "CHOOSE_CARD".equals(phase) && myName.equals(chooseTarget);
@@ -309,8 +340,8 @@ public class BangTableScreen extends Screen {
         }
         if (isReacting) {
             lastReactionSendTime = System.currentTimeMillis();
-            if (canUseBarrel && selectedCardIndices.isEmpty()) {
-                sendAction("USE_BARREL", 0, "");
+            if ((canUseBarrel || canUseJourdonnais) && selectedCardIndices.isEmpty()) {
+                sendAction(canUseBarrel ? "USE_BARREL" : "USE_JOURDONNAIS", 0, "");
                 return;
             }
             int idx = selectedCardIndices.isEmpty() ? -1 : selectedCardIndices.iterator().next();
@@ -338,6 +369,24 @@ public class BangTableScreen extends Screen {
             return;
         }
         boolean isDuelMyTurn = "DUEL_PLAY".equals(phase) && myName.equals(duelCurrentPlayer);
+        boolean isCharacterSelectMyTurn = "CHARACTER_SELECT".equals(phase) && characterSelectOptions.length > 0;
+        boolean isSidHeal = isMyTurn && hero.characterId == 14 && hero.hp < hero.maxHp && selectedCardIndices.size() == 2;
+        boolean isDrawChoice = "DRAW_CHOICE".equals(phase) && myName.equals(currentPlayerName);
+        if (isCharacterSelectMyTurn && selectedCharacterOption >= 0 && selectedCharacterOption < characterSelectOptions.length) {
+            sendAction("SELECT_CHARACTER", characterSelectOptions[selectedCharacterOption], "");
+            selectedCharacterOption = -1;
+            return;
+        }
+        if (isSidHeal && selectedCardIndices.size() == 2) {
+            String data = selectedCardIndices.stream().sorted().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse("");
+            sendAction("SID_HEAL", 0, data);
+            selectedCardIndices.clear();
+            return;
+        }
+        if (isDrawChoice) {
+            sendAction("DRAW_CHOICE", 0, "deck");
+            return;
+        }
         if (isDuelMyTurn) {
             if (!selectedCardIndices.isEmpty() && isSelectedBang(hero)) {
                 int idx = selectedCardIndices.iterator().next();
@@ -374,12 +423,18 @@ public class BangTableScreen extends Screen {
     private void parseState(String json) {
         try {
             JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            int seq = obj.has("stateSequence") ? obj.get("stateSequence").getAsInt() : 0;
+            if (lastStateSequence >= 0 && seq <= lastStateSequence) return; // Ignore stale packet
+            lastStateSequence = seq;
+
             phase = obj.has("phase") ? obj.get("phase").getAsString() : "WAITING";
             statusMessage = obj.has("status") ? obj.get("status").getAsString() : "";
             reactingTarget = obj.has("reactingTarget") ? obj.get("reactingTarget").getAsString() : "";
             jailDrawnCard = obj.has("jailDrawnCard") ? obj.get("jailDrawnCard").getAsString() : "";
             dynamiteDrawnCard = obj.has("dynamiteDrawnCard") ? obj.get("dynamiteDrawnCard").getAsString() : "";
             canUseBarrel = obj.has("canUseBarrel") && obj.get("canUseBarrel").getAsBoolean();
+            canUseJourdonnais = obj.has("canUseJourdonnais") && obj.get("canUseJourdonnais").getAsBoolean();
+            drawChoiceCharacter = obj.has("drawChoiceCharacter") ? obj.get("drawChoiceCharacter").getAsInt() : 0;
             chooseTarget = obj.has("chooseTarget") ? obj.get("chooseTarget").getAsString() : "";
             chooseVictim = obj.has("chooseVictim") ? obj.get("chooseVictim").getAsString() : "";
             chooseIsPanic = obj.has("chooseIsPanic") && obj.get("chooseIsPanic").getAsBoolean();
@@ -397,6 +452,19 @@ public class BangTableScreen extends Screen {
             dynamitePlayerIndex = obj.has("dynamitePlayerIndex") ? obj.get("dynamitePlayerIndex").getAsInt() : -1;
             jailPlayerIndex = obj.has("jailPlayerIndex") ? obj.get("jailPlayerIndex").getAsInt() : -1;
             gameOverWinner = obj.has("gameOverWinner") ? obj.get("gameOverWinner").getAsString() : "";
+            characterSelectOptions = new int[0];
+            if (obj.has("characterSelectOptions")) {
+                JsonArray opts = obj.getAsJsonArray("characterSelectOptions");
+                characterSelectOptions = new int[opts.size()];
+                for (int i = 0; i < opts.size(); i++) characterSelectOptions[i] = opts.get(i).getAsInt();
+            }
+            if (obj.has("characterSelectTicks")) characterSelectTicks = obj.get("characterSelectTicks").getAsInt();
+            kitCarlsonCards.clear();
+            if (obj.has("kitCarlsonCards")) {
+                for (JsonElement e : obj.getAsJsonArray("kitCarlsonCards"))
+                    kitCarlsonCards.add(e.getAsString());
+            }
+            if (!"KIT_DISCARD".equals(phase) || kitCarlsonCards.size() != 3) selectedKitCarlsonIndices.clear();
 
             players.clear();
             if (obj.has("players")) {
@@ -410,6 +478,7 @@ public class BangTableScreen extends Screen {
                             p.get("name").getAsString(),
                             p.get("seatIndex").getAsInt(),
                             p.has("role") ? p.get("role").getAsString() : "",
+                            p.has("characterId") ? p.get("characterId").getAsInt() : 0,
                             p.get("maxHp").getAsInt(),
                             p.get("hp").getAsInt(),
                             p.get("isAlive").getAsBoolean(),
@@ -457,6 +526,7 @@ public class BangTableScreen extends Screen {
                 dealAnims.clear();
                 prevHeroCards.clear();
                 roleRevealed = false;
+                lastStateSequence = -1; // Reset so we accept first packet of new game
             }
             PlayerInfo heroForRole = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
             if (heroForRole != null && "ROLE_REVEAL".equals(phase) && !heroForRole.role.isEmpty() && !roleRevealed) {
@@ -575,12 +645,66 @@ public class BangTableScreen extends Screen {
         }
 
         renderRoleRevealOverlay(ctx);
+        renderCharacterSelectOverlay(ctx, mouseX, mouseY);
+        renderKitCarlsonOverlay(ctx, mouseX, mouseY);
         renderGameOverOverlay(ctx);
         renderCenterNotification(ctx);
         renderHeroPanel(ctx, mouseX, mouseY);
         renderLogPanel(ctx, mouseX, mouseY);
         updateButtons();
         super.render(ctx, mouseX, mouseY, delta);
+        if (DEBUG_HITBOX) renderDebugHitboxes(ctx);
+    }
+
+    /** Vẽ hitbox màu đỏ cho các vùng có thể tương tác (lá bài xám, panel, ô trang bị). */
+    private void renderDebugHitboxes(DrawContext ctx) {
+        int n = Math.min(players.size(), Math.min(positionCache.size(), displayOrder.size()));
+        PlayerInfo hero = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
+
+        // Hero hand cards (lá bài xám có thể click)
+        if (hero != null && !hero.hand.isEmpty()) {
+            int[] area = getHandArea();
+            int handX = area[0], handY = area[1];
+            for (int i = 0; i < Math.min(hero.hand.size(), HAND_MAX_CARDS); i++) {
+                int[] pos = cardIndexToPosition(i, handX, handY);
+                int fx = pos[0], fy = pos[1];
+                ctx.fill(fx, fy, fx + FRAME_W, fy + FRAME_H, 0x44FF0000);
+                ctx.drawStrokedRectangle(fx, fy, FRAME_W, FRAME_H, 0xFFFF0000);
+            }
+        }
+
+        // Player panel hitboxes
+        for (int i = 0; i < n; i++) {
+            int playerIdx = displayOrder.get(i);
+            PlayerInfo p = players.get(playerIdx);
+            boolean isHero = p.name.equals(myName);
+            int hx = isHero ? 2 : positionCache.get(i).hitboxX();
+            int hy = isHero ? height - PANEL_H - 2 : positionCache.get(i).hitboxY();
+            ctx.fill(hx, hy, hx + PANEL_W, hy + PANEL_H, 0x22FF0000);
+            ctx.drawStrokedRectangle(hx, hy, PANEL_W, PANEL_H, 0xFFFF0000);
+
+            // Ô trang bị (equipment slots) có thể click
+            int innerPad = 1;
+            int headerH = 12;
+            int rowBlueY = hy + innerPad + headerH + PANEL_SLOT_H + 1;
+            for (int s = 0; s < 6; s++) {
+                int sx = hx + INNER_PAD_LEFT + s * (PANEL_SLOT_W + 1);
+                ctx.fill(sx, rowBlueY, sx + PANEL_SLOT_W, rowBlueY + PANEL_SLOT_H, 0x44FF0000);
+                ctx.drawStrokedRectangle(sx, rowBlueY, PANEL_SLOT_W, PANEL_SLOT_H, 0xFFFF0000);
+            }
+        }
+
+        // Deck center
+        int[] dc = getDeckCenter();
+        int deckX = dc[0], deckY = dc[1];
+        ctx.fill(deckX, deckY, deckX + FRAME_W, deckY + FRAME_H, 0x44FF0000);
+        ctx.drawStrokedRectangle(deckX, deckY, FRAME_W, FRAME_H, 0xFFFF0000);
+
+        // Dynamite slot
+        int slotGap = 2;
+        int dynX = width / 2 + slotGap / 2;
+        ctx.fill(dynX, deckY, dynX + FRAME_W, deckY + FRAME_H, 0x44FF0000);
+        ctx.drawStrokedRectangle(dynX, deckY, FRAME_W, FRAME_H, 0xFFFF0000);
     }
 
     private void renderDiscardFlyAnims(DrawContext ctx) {
@@ -668,6 +792,78 @@ public class BangTableScreen extends Screen {
                 int descW = textRenderer.getWidth(desc);
                 ctx.drawTextWithShadow(textRenderer, desc, width / 2 - descW / 2, (int) deckY + CARD_H + 8, C_WHITE);
             }
+        }
+    }
+
+    private void renderCharacterSelectOverlay(DrawContext ctx, int mouseX, int mouseY) {
+        if (!"CHARACTER_SELECT".equals(phase) || characterSelectOptions.length == 0) return;
+
+        ctx.fill(0, 0, width, height, 0x88000000);
+        int cx = width / 2;
+        int cy = height / 2 - 50;
+        int remainingSec = Math.max(0, 30 - characterSelectTicks / 20);
+        ctx.drawCenteredTextWithShadow(textRenderer, BangLang.tr("Choose your character! (" + remainingSec + "s)", "Chọn nhân vật! (" + remainingSec + "s)"), cx, cy - 50, C_WHITE);
+
+        int cardW = 48, cardH = 70;
+        int gap = 12;
+        int totalW = characterSelectOptions.length * (cardW + gap) - gap;
+        int startX = cx - totalW / 2;
+        int cardY = cy - cardH / 2;
+
+        for (int i = 0; i < characterSelectOptions.length; i++) {
+            int id = characterSelectOptions[i];
+            var c = BangCharacter.get(id);
+            if (c == null) continue;
+            int cardX = startX + i * (cardW + gap);
+            boolean selected = selectedCharacterOption == i;
+            if (selected) ctx.drawStrokedRectangle(cardX - 2, cardY - 2, cardW + 4, cardH + 4, C_ORANGE);
+            ctx.fill(cardX, cardY, cardX + cardW, cardY + cardH, 0xCC333333);
+            ctx.drawStrokedRectangle(cardX, cardY, cardW, cardH, 0xFF555555);
+            drawCharacterCardScaled(ctx, cardX + 2, cardY + 2, id, cardW - 4, cardH - 4);
+            ctx.drawTextWithShadow(textRenderer, c.name(), cardX, cardY + cardH - 10, C_WHITE);
+        }
+        // Tooltip when hovering over character
+        for (int i = 0; i < characterSelectOptions.length; i++) {
+            int id = characterSelectOptions[i];
+            var c = BangCharacter.get(id);
+            if (c == null) continue;
+            int cardX = startX + i * (cardW + gap);
+            if (mouseX >= cardX && mouseX <= cardX + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
+                String ability = BangLang.trAbility(id, c.ability());
+                ctx.drawTooltip(textRenderer, List.of(
+                        Text.literal(c.name()),
+                        Text.literal(BangLang.tr("HP", "Máu") + ": " + c.hp()),
+                        Text.literal(ability)
+                ), mouseX, mouseY);
+                break;
+            }
+        }
+    }
+
+    private void drawCharacterCardScaled(DrawContext ctx, int x, int y, int charId, int w, int h) {
+        String path = "textures/character/" + String.format("%03d", charId) + "-character.png";
+        Identifier tex = Identifier.of("bang", path);
+        ctx.drawTexture(RenderPipelines.GUI_TEXTURED, tex, x, y, 0, 0, w, h, w, h);
+    }
+
+    private void renderKitCarlsonOverlay(DrawContext ctx, int mouseX, int mouseY) {
+        if (!"KIT_DISCARD".equals(phase) || !myName.equals(currentPlayerName) || kitCarlsonCards.size() != 3) return;
+        ctx.fill(0, 0, width, height, 0x88000000);
+        int cx = width / 2;
+        int cy = height / 2 - 30;
+        ctx.drawCenteredTextWithShadow(textRenderer, BangLang.tr("Kit Carlson: pick 2 to keep, 1 goes on deck", "Kit Carlson: chọn 2 giữ, 1 đặt lên bộ bài"), cx, cy - 55, C_WHITE);
+        int cardW = 48, cardH = 70;
+        int gap = 12;
+        int totalW = 3 * (cardW + gap) - gap;
+        int startX = cx - totalW / 2;
+        int cardY = cy - cardH / 2;
+        for (int i = 0; i < 3; i++) {
+            int cardX = startX + i * (cardW + gap);
+            boolean selected = selectedKitCarlsonIndices.contains(i);
+            if (selected) ctx.drawStrokedRectangle(cardX - 2, cardY - 2, cardW + 4, cardH + 4, C_ORANGE);
+            ctx.fill(cardX, cardY, cardX + cardW, cardY + cardH, 0xCC333333);
+            ctx.drawStrokedRectangle(cardX, cardY, cardW, cardH, 0xFF555555);
+            drawBangCardScaled(ctx, cardX + 2, cardY + 2, kitCarlsonCards.get(i), cardW - 4, cardH - 4);
         }
     }
 
@@ -792,7 +988,7 @@ public class BangTableScreen extends Screen {
 
         for (int s = 0; s < 6; s++) {
             int sx = innerL + s * (sw + slotGap);
-            int slotColor = (s == 0) ? SLOT_RED : (s <= MAX_EQUIP_SLOTS) ? SLOT_BLUE : SLOT_YELLOW;
+            int slotColor = (s == 0) ? SLOT_RED : (s == 1) ? SLOT_YELLOW : SLOT_BLUE; // 0=role, 1=character(yellow), 2-5=equipment(blue)
             ctx.fill(sx, rowBlueY, sx + sw, rowBlueY + sh, slotColor);
             ctx.drawStrokedRectangle(sx, rowBlueY, sw, sh, 0xFF444444);
 
@@ -804,17 +1000,19 @@ public class BangTableScreen extends Screen {
                 } else if (!p.role.isEmpty() && !inRoleReveal) {
                     ctx.drawCenteredTextWithShadow(textRenderer, "?", sx + sw/2, rowBlueY + sh/2 - 4, C_GRAY);
                 }
-            } else if (s <= MAX_EQUIP_SLOTS) {
-                String code = getEquipmentAtSlot(p, s - 1);
-                if (code != null) drawCardInFrame(ctx, sx, rowBlueY, code);
+            } else if (s == 1) {
+                if (p.characterId > 0) drawCardInFrame(ctx, sx, rowBlueY, "character:" + String.format("%03d", p.characterId));
             } else if (s == 5 && isJailed) {
                 String jailStr = BangLang.tr("Jail", "Tù");
                 ctx.drawCenteredTextWithShadow(textRenderer, jailStr, sx + sw/2, rowBlueY + sh/2 - 4, C_WHITE);
+            } else if (s >= 2 && s <= 5) {
+                String code = getEquipmentAtSlot(p, s - 2);
+                if (code != null) drawCardInFrame(ctx, sx, rowBlueY, code);
             }
         }
     }
 
-    /** Equipment tại slot (0-3). Bỏ qua Dynamite — nó ở ô cạnh deck. */
+    /** Equipment tại slot (0-3). Bỏ qua Dynamite — nó ở ô cạnh deck. Slot 0=role, 1=character, 2-5=equipment. */
     private String getEquipmentAtSlot(PlayerInfo p, int slotIdx) {
         List<String> onPlayer = new ArrayList<>();
         for (String code : p.equipment) {
@@ -831,6 +1029,11 @@ public class BangTableScreen extends Screen {
         int cx = frameX + pad, cy = frameY + pad;
         if (code.startsWith("role:")) {
             drawRoleCardScaled(ctx, cx, cy, code.substring(5), CARD_W, CARD_H);
+        } else if (code.startsWith("character:")) {
+            try {
+                int id = Integer.parseInt(code.substring(10));
+                drawCharacterCardScaled(ctx, cx, cy, id, CARD_W, CARD_H);
+            } catch (NumberFormatException ignored) {}
         } else {
             drawBangCardScaled(ctx, cx, cy, code, CARD_W, CARD_H);
         }
@@ -923,8 +1126,14 @@ public class BangTableScreen extends Screen {
                         ctx.drawTooltip(textRenderer, List.of(Text.literal(getRoleDescription(p.role))), mouseX, mouseY);
                         return;
                     }
-                    if (s >= 1 && s <= MAX_EQUIP_SLOTS) {
-                        String code = getEquipmentAtSlot(p, s - 1);
+                    if (s == 1 && p.characterId > 0) {
+                        var c = BangCharacter.get(p.characterId);
+                        if (c != null)
+                            ctx.drawTooltip(textRenderer, List.of(Text.literal(c.name() + " (" + c.hp() + " HP)"), Text.literal(c.ability())), mouseX, mouseY);
+                        return;
+                    }
+                    if (s >= 2 && s <= 5) {
+                        String code = getEquipmentAtSlot(p, s - 2);
                         if (code != null) {
                             BangCard card = BangCard.fromCode(code);
                             if (card != null)
@@ -1040,10 +1249,73 @@ public class BangTableScreen extends Screen {
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, TEX_CARD_BACK, (int) x, (int) y, 0, 0, CARD_W, CARD_H, TEX_CARD_W, TEX_CARD_H);
     }
 
+    /** Character select card positions (match renderCharacterSelectOverlay). */
+    private int[] getCharacterSelectCardBounds(int index) {
+        int cx = width / 2;
+        int cy = height / 2 - 50;
+        int cardW = 48, cardH = 70;
+        int gap = 12;
+        int totalW = characterSelectOptions.length * (cardW + gap) - gap;
+        int startX = cx - totalW / 2;
+        int cardY = cy - cardH / 2;
+        int cardX = startX + index * (cardW + gap);
+        return new int[]{ cardX, cardY, cardW, cardH };
+    }
+
     /** Overlay nhận click trước các nút, xử lý hitbox panel. */
     boolean handlePanelClick(Click click) {
         double mouseX = click.x();
         double mouseY = click.y();
+
+        if ("DRAW_CHOICE".equals(phase) && myName.equals(currentPlayerName) && drawChoiceCharacter == 12) {
+            int n = Math.min(players.size(), Math.min(positionCache.size(), displayOrder.size()));
+            for (int i = 0; i < n; i++) {
+                int targetIdx = displayOrder.get(i);
+                PlayerInfo target = players.get(targetIdx);
+                if (target.name.equals(myName) || !target.isAlive || target.hand.isEmpty()) continue;
+                PlayerPosition pos = positionCache.get(i);
+                if (mouseX >= pos.hitboxX() && mouseX <= pos.hitboxX() + pos.hitboxW() && mouseY >= pos.hitboxY() && mouseY <= pos.hitboxY() + pos.hitboxH()) {
+                    sendAction("DRAW_CHOICE", 0, "player:" + target.name);
+                    return true;
+                }
+            }
+        }
+        if ("DRAW_CHOICE".equals(phase) && myName.equals(currentPlayerName) && drawChoiceCharacter == 16) {
+            int[] dc = getDeckCenter();
+            int discardX = dc[0] + FRAME_W + 2;
+            int discardY = dc[1];
+            if (mouseX >= discardX && mouseX <= discardX + FRAME_W && mouseY >= discardY && mouseY <= discardY + FRAME_H && deckCount >= 0) {
+                sendAction("DRAW_CHOICE", 0, "discard");
+                return true;
+            }
+        }
+        if ("KIT_DISCARD".equals(phase) && myName.equals(currentPlayerName) && kitCarlsonCards.size() == 3) {
+            int cx = width / 2;
+            int cy = height / 2 - 30;
+            int cardW = 48, cardH = 70;
+            int gap = 12;
+            int totalW = 3 * (cardW + gap) - gap;
+            int startX = cx - totalW / 2;
+            int cardY = cy - cardH / 2;
+            for (int i = 0; i < 3; i++) {
+                int cardX = startX + i * (cardW + gap);
+                if (mouseX >= cardX && mouseX <= cardX + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
+                    if (selectedKitCarlsonIndices.contains(i)) selectedKitCarlsonIndices.remove(i);
+                    else if (selectedKitCarlsonIndices.size() < 2) selectedKitCarlsonIndices.add(i);
+                    return true;
+                }
+            }
+        }
+        if ("CHARACTER_SELECT".equals(phase) && characterSelectOptions.length > 0) {
+            for (int i = 0; i < characterSelectOptions.length; i++) {
+                int[] b = getCharacterSelectCardBounds(i);
+                if (mouseX >= b[0] && mouseX <= b[0] + b[2] && mouseY >= b[1] && mouseY <= b[1] + b[3]) {
+                    selectedCharacterOption = i;
+                    return true;
+                }
+            }
+        }
+
         PlayerInfo hero = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
         boolean isMyTurn = myName.equals(currentPlayerName) && ("PLAYING".equals(phase) || "DISCARD".equals(phase));
         boolean isReacting = ("REACTING".equals(phase) || "GATLING_REACT".equals(phase)) && myName.equals(reactingTarget);
@@ -1051,23 +1323,23 @@ public class BangTableScreen extends Screen {
         boolean needToDiscard = hero != null && isMyTurn && hero.hand.size() > Math.max(1, hero.hp);
         boolean isCatBalouAttacker = isChoosing && chooseTarget.equals(myName) && !chooseIsPanic && !chooseVictim.isEmpty();
 
-        if (!selectedCardIndices.isEmpty() && hero != null && (isMyTurn || isReacting) && !needToDiscard) {
+        // Luôn cho phép chọn mục tiêu khi đánh Bang/Panic/Cat Balou/Duel (hand > HP không chặn)
+        if (!selectedCardIndices.isEmpty() && hero != null && (isMyTurn || isReacting)) {
             int selIdx = selectedCardIndices.iterator().next();
             if (isMyTurn && selIdx < hero.hand.size()) {
                 BangCard card = BangCard.fromCode(hero.hand.get(selIdx));
                 if (card != null && needsTarget(card.typeId())) {
                     int n = Math.min(players.size(), Math.min(positionCache.size(), displayOrder.size()));
                     for (int i = 0; i < n; i++) {
+                        int targetIdx = displayOrder.get(i);
+                        PlayerInfo target = players.get(targetIdx);
+                        if (target.name.equals(myName) || !target.isAlive) continue;
                         PlayerPosition pos = positionCache.get(i);
                         int hx = pos.hitboxX(), hy = pos.hitboxY(), hw = pos.hitboxW(), hh = pos.hitboxH();
                         if (mouseX >= hx && mouseX <= hx + hw && mouseY >= hy && mouseY <= hy + hh) {
-                            int targetIdx = displayOrder.get(i);
-                            PlayerInfo target = players.get(targetIdx);
-                            if (!target.name.equals(myName) && target.isAlive) {
-                                sendAction("PLAY_CARD", selIdx, target.name);
-                                selectedCardIndices.clear();
-                                return true;
-                            }
+                            sendAction("PLAY_CARD", selIdx, target.name);
+                            selectedCardIndices.clear();
+                            return true;
                         }
                     }
                 }
@@ -1080,13 +1352,15 @@ public class BangTableScreen extends Screen {
             int headerH = 12;
             int rowBlueY = 0;
             for (int i = 0; i < n; i++) {
-                PlayerInfo p = players.get(displayOrder.get(i));
+                int playerIdx = displayOrder.get(i);
+                PlayerInfo p = players.get(playerIdx);
                 if (!p.name.equals(chooseVictim)) continue;
                 int hx = positionCache.get(i).hitboxX();
                 int hy = positionCache.get(i).hitboxY();
                 rowBlueY = hy + innerPad + headerH + PANEL_SLOT_H + 1;
-                for (int s = 1; s <= MAX_EQUIP_SLOTS; s++) {
-                    String code = getEquipmentAtSlot(p, s - 1);
+                for (int s = 2; s <= 5; s++) {
+                    if (s == 5 && playerIdx == jailPlayerIndex) continue;
+                    String code = getEquipmentAtSlot(p, s - 2);
                     if (code != null) {
                         int eqIdx = p.equipment.indexOf(code);
                         BangCard c = BangCard.fromCode(code);
@@ -1117,6 +1391,9 @@ public class BangTableScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
+        // Xử lý chọn mục tiêu trước (Bang, Panic, Cat Balou, Duel) — ưu tiên trước hand card
+        if (handlePanelClick(click)) return true;
+
         double mouseX = click.x();
         double mouseY = click.y();
         PlayerInfo hero = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);

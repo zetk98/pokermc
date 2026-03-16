@@ -5,13 +5,18 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.pokermc.bang.network.BangNetworking;
 import com.pokermc.blackjack.network.BlackjackNetworking;
+import com.pokermc.common.network.CloseGamePayload;
 import com.pokermc.poker.network.PokerNetworking;
 import com.pokermc.bang.screen.BangLobbyScreen;
 import com.pokermc.bang.screen.BangTableScreen;
 import com.pokermc.blackjack.screen.BlackjackLobbyScreen;
 import com.pokermc.blackjack.screen.BlackjackTableScreen;
+import com.pokermc.blackjack.screen.CreateBlackjackRoomScreen;
+import com.pokermc.poker.screen.CreateRoomScreen;
 import com.pokermc.poker.screen.PokerLobbyScreen;
 import com.pokermc.poker.screen.PokerTableScreen;
+import com.pokermc.xoso.network.XosoNetworking;
+import com.pokermc.xoso.screen.XosoTableScreen;
 import com.pokermc.common.screen.TradeScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -58,6 +63,21 @@ public class PokerModClient implements ClientModInitializer {
                         } catch (Exception e) {
                             System.err.println("[CasinoCraft Client] Error: " + e.getMessage());
                             e.printStackTrace();
+                        }
+                    });
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                XosoNetworking.OpenXosoPayload.ID,
+                (payload, context) -> {
+                    context.client().execute(() -> {
+                        try {
+                            XosoTableScreen screen = new XosoTableScreen(payload.pos(), payload.stateJson());
+                            context.client().setScreen(screen);
+                            screen.updateState(payload.stateJson());
+                        } catch (Exception e) {
+                            System.err.println("[CasinoCraft] XOSO error: " + e.getMessage());
                         }
                     });
                 }
@@ -167,6 +187,41 @@ public class PokerModClient implements ClientModInitializer {
                         bls.updateState(payload.stateJson());
                     }
                 })
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                XosoNetworking.XosoStatePayload.ID,
+                (payload, context) -> context.client().execute(() -> {
+                    net.minecraft.client.gui.screen.Screen s = context.client().currentScreen;
+                    if (s instanceof XosoTableScreen xts) xts.updateState(payload.stateJson());
+                })
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                CloseGamePayload.ID,
+                (payload, context) -> context.client().execute(() -> {
+                    Screen s = context.client().currentScreen;
+                    if (s == null) return;
+                    net.minecraft.util.math.BlockPos screenPos = null;
+                    if (s instanceof PokerTableScreen pts) screenPos = pts.getTablePos();
+                    else if (s instanceof PokerLobbyScreen pls) screenPos = pls.getTablePos();
+                    else if (s instanceof BlackjackTableScreen bts) screenPos = bts.getTablePos();
+                    else if (s instanceof BlackjackLobbyScreen bls) screenPos = bls.getTablePos();
+                    else if (s instanceof BangTableScreen bts2) screenPos = bts2.getTablePos();
+                    else if (s instanceof BangLobbyScreen bls2) screenPos = bls2.getTablePos();
+                    else if (s instanceof XosoTableScreen xts) screenPos = xts.getTablePos();
+                    else if (s instanceof TradeScreen ts) screenPos = ts.getTablePos();
+                    else if (s instanceof CreateRoomScreen crs) screenPos = crs.getTablePos();
+                    else if (s instanceof CreateBlackjackRoomScreen cbrs) screenPos = cbrs.getTablePos();
+                    if (screenPos != null && screenPos.equals(payload.pos())) {
+                        context.client().setScreen(null);
+                    }
+                })
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                com.pokermc.common.network.CloseScreenPayload.ID,
+                (payload, context) -> context.client().execute(() -> context.client().setScreen(null))
         );
 
         System.out.println("[CasinoCraft Client] Client initialized.");

@@ -52,6 +52,7 @@ public class TradeScreen extends Screen {
     }
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private final boolean isBlackjack;
     private int framesOpen = 0;
     private final List<TradeItem> items = new ArrayList<>();
@@ -72,10 +73,10 @@ public class TradeScreen extends Screen {
     }
 
     private void parseState(String json) {
+        items.clear();
         try {
             JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
             bankBalance = obj.has("bankBalance") ? obj.get("bankBalance").getAsInt() : 0;
-            items.clear();
             if (obj.has("tradeItems")) {
                 for (JsonElement e : obj.getAsJsonArray("tradeItems")) {
                     JsonObject to = e.getAsJsonObject();
@@ -87,15 +88,15 @@ public class TradeScreen extends Screen {
                             to.has("sellGives") ? to.get("sellGives").getAsInt() : sellRate));
                 }
             }
-            // Default items if server didn't send any (buy: 1 iron=2zc, 1 gold=3zc, 1 emerald=7zc, 1 diamond=13zc)
-            if (items.isEmpty()) {
-                items.add(new TradeItem("minecraft:iron_ingot",  2,  2,  1));
-                items.add(new TradeItem("minecraft:gold_ingot",  3,  3,  1));
-                items.add(new TradeItem("minecraft:emerald",    7,  7,  1));
-                items.add(new TradeItem("minecraft:diamond",    13, 13, 1));
-            }
-            if (selectedIdx >= items.size()) selectedIdx = 0;
         } catch (Exception ignored) {}
+        // Always show defaults if empty (iron, gold, emerald, diamond)
+        if (items.isEmpty()) {
+            items.add(new TradeItem("minecraft:iron_ingot",  2,  2,  1));
+            items.add(new TradeItem("minecraft:gold_ingot",  3,  3,  1));
+            items.add(new TradeItem("minecraft:emerald",    7,  7,  1));
+            items.add(new TradeItem("minecraft:diamond",    13, 13, 1));
+        }
+        if (selectedIdx >= items.size()) selectedIdx = 0;
     }
 
     public void updateState(String json) {
@@ -228,7 +229,7 @@ public class TradeScreen extends Screen {
         // Tab highlight
         ctx.fill(x0 + (buyMode ? 24 : 78), y0 + 44, x0 + (buyMode ? 74 : 128), y0 + 46, C_GOLD);
 
-        // ── Item rows ─────────────────────────────────────────────────────────
+        // ── Item rows (background only; text drawn after super so it's on top) ──
         int rowY = y0 + 52;
         for (int i = 0; i < items.size(); i++) {
             TradeItem ti = items.get(i);
@@ -238,11 +239,17 @@ public class TradeScreen extends Screen {
             // Row background
             ctx.fill(x0 + 8, ry, x0 + W - 8, ry + 20, sel ? 0xFF1A2A3A : 0xFF121220);
             if (sel) drawBorder(ctx, x0 + 8, ry, W - 16, 20, C_GOLD, 1);
+        }
 
-            // Item name
+        super.render(ctx, mouseX, mouseY, delta);
+
+        // ── Item text (drawn after buttons so text is visible on top) ───────────
+        for (int i = 0; i < items.size(); i++) {
+            TradeItem ti = items.get(i);
+            int ry = rowY + i * 22;
+
             ctx.drawTextWithShadow(textRenderer, ti.displayName(), x0 + 14, ry + 6, C_WHITE);
 
-            // Rate + Max
             int avail = availableInInventory(i);
             if (buyMode) {
                 String rate = "1 " + ti.displayName() + " = " + ti.buyRate() + " ZC";
@@ -263,11 +270,11 @@ public class TradeScreen extends Screen {
             }
         }
 
-        // ── Amount controls ────────────────────────────────────────────────────
+        // ── Amount controls label ─────────────────────────────────────────────
         int ctrlY = rowY + items.size() * 22 + 10;
         ctx.drawCenteredTextWithShadow(textRenderer, "Qty: " + amount, cx - 70, ctrlY + 4, C_WHITE);
 
-        // ── Bottom right: preview result (Buy: ZC received, Sell: ZC cost) ───────
+        // ── Bottom right: preview result ───────────────────────────────────────
         if (!items.isEmpty()) {
             TradeItem ti = items.get(selectedIdx);
             String preview;
@@ -282,8 +289,6 @@ public class TradeScreen extends Screen {
             int pw = textRenderer.getWidth(preview);
             ctx.drawTextWithShadow(textRenderer, preview, x0 + W - 8 - pw, y0 + H - 24, C_GREEN);
         }
-
-        super.render(ctx, mouseX, mouseY, delta);
     }
 
     private void drawBorder(DrawContext ctx, int x, int y, int w, int h, int color, int t) {

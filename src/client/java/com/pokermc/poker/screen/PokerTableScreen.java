@@ -61,9 +61,11 @@ public class PokerTableScreen extends Screen {
 
     // ── State ─────────────────────────────────────────────────────────────────
     private final BlockPos tablePos;
+
+    public BlockPos getTablePos() { return tablePos; }
     private int framesOpen = 0;
     private String phase = "WAITING";
-    private int pot = 0, currentBet = 0, betLevel = 10;
+    private int pot = 0, currentBet = 0, betLevel = 10, minRaiseAmount = 2;
     private String currentPlayerName = "", lastWinner = "", lastWinningHand = "";
     private int lastPotWon = 0;
     private String ownerName = "";
@@ -90,9 +92,7 @@ public class PokerTableScreen extends Screen {
     // ── Buttons ───────────────────────────────────────────────────────────────
     private ButtonWidget btnLeave, btnStart, btnReset;
     private ButtonWidget btnFold, btnCheck, btnCall, btnAllIn, btnRaise;
-    private ButtonWidget btnMinus, btnPlus;
     private TextFieldWidget raiseInput;
-    private int raiseAmount = 0;
 
     // ── Cached geometry ───────────────────────────────────────────────────────
     private int tableTx, tableTy, tableW, tableH;
@@ -126,8 +126,6 @@ public class PokerTableScreen extends Screen {
         tableH = Math.min(height - 20, 230);
         tableTx = cx - tableW / 2;
         tableTy = cy - tableH / 2;
-
-        if (raiseAmount <= 0) raiseAmount = Math.max(1, betLevel);
 
         // Leave button — top right
         btnLeave = addDrawableChild(ButtonWidget.builder(Text.literal("✕ Leave"),
@@ -169,21 +167,16 @@ public class PokerTableScreen extends Screen {
                 b -> {
                     int amt = parseRaiseAmount();
                     if (amt > 0) sendAction("RAISE", amt);
+                    else if (client != null && client.player != null)
+                        client.player.sendMessage(Text.literal("§cEnter raise amount (min " + minRaiseAmount + ")"), true);
                 })
                 .dimensions(cx + 61, btnY, 40, btnH).build());
 
-        raiseInput = addDrawableChild(new TextFieldWidget(textRenderer, cx + 104, btnY, 42, btnH,
+        raiseInput = addDrawableChild(new TextFieldWidget(textRenderer, cx + 104, btnY, 60, btnH,
                 Text.literal("")));
         raiseInput.setMaxLength(8);
         raiseInput.setTextPredicate(s -> s.isEmpty() || s.matches("\\d+"));
-        raiseInput.setPlaceholder(Text.literal("+" + betLevel));
-
-        btnMinus = addDrawableChild(ButtonWidget.builder(Text.literal("−"),
-                b -> { raiseAmount = Math.max(1, raiseAmount - betLevel); syncRaiseInput(); })
-                .dimensions(cx + 149, btnY, 12, btnH).build());
-        btnPlus = addDrawableChild(ButtonWidget.builder(Text.literal("+"),
-                b -> { raiseAmount += betLevel; syncRaiseInput(); })
-                .dimensions(cx + 163, btnY, 12, btnH).build());
+        raiseInput.setPlaceholder(Text.literal("amount"));
 
         updateButtonVisibility();
     }
@@ -208,8 +201,6 @@ public class PokerTableScreen extends Screen {
         btnAllIn.visible  = isMyTurn;
         btnRaise.visible  = showRaiseControls;
         if (raiseInput != null) raiseInput.visible = showRaiseControls;
-        if (btnMinus != null) btnMinus.visible = showRaiseControls;
-        if (btnPlus != null) btnPlus.visible = showRaiseControls;
 
         PlayerInfo me = players.stream().filter(p -> p.name.equals(myName)).findFirst().orElse(null);
         int toCall = me != null ? Math.max(0, currentBet - me.currentBet) : 0;
@@ -227,18 +218,13 @@ public class PokerTableScreen extends Screen {
             btnRaise.active = me.chips > 0 && !hasAllInPlayer;
         }
 
-        if (btnRaise.visible) syncRaiseInput();
     }
 
     private int parseRaiseAmount() {
-        if (raiseInput == null) return raiseAmount;
+        if (raiseInput == null) return 0;
         String s = raiseInput.getText().trim();
-        if (s.isEmpty()) return raiseAmount;
-        try { return Math.max(betLevel, Integer.parseInt(s)); } catch (NumberFormatException e) { return raiseAmount; }
-    }
-
-    private void syncRaiseInput() {
-        if (raiseInput != null) raiseInput.setText(String.valueOf(raiseAmount));
+        if (s.isEmpty()) return 0;
+        try { return Math.max(minRaiseAmount, Integer.parseInt(s)); } catch (NumberFormatException e) { return 0; }
     }
 
     // ── State update ─────────────────────────────────────────────────────────
@@ -255,13 +241,13 @@ public class PokerTableScreen extends Screen {
             lastPotWon         = obj.has("lastPotWon") ? obj.get("lastPotWon").getAsInt() : 0;
             ownerName          = obj.has("owner")       ? obj.get("owner").getAsString()    : "";
             betLevel           = obj.has("betLevel")    ? obj.get("betLevel").getAsInt()     : 10;
+            minRaiseAmount     = obj.has("minRaiseAmount") ? obj.get("minRaiseAmount").getAsInt() : 2;
             dealerIndex        = obj.has("dealerIndex") ? obj.get("dealerIndex").getAsInt()  : 0;
             bankBalance        = obj.has("bankBalance") ? obj.get("bankBalance").getAsInt()  : 0;
             turnTimeRemaining  = obj.has("turnTimeRemaining") ? obj.get("turnTimeRemaining").getAsInt() : 0;
             if (turnTimeRemaining > 0 && currentPlayerName.equals(myName)) turnTimeReceivedAt = System.currentTimeMillis();
 
-            if (raiseAmount <= 0) raiseAmount = Math.max(1, betLevel);
-            if (raiseInput != null) raiseInput.setPlaceholder(Text.literal("+" + betLevel));
+            if (raiseInput != null) raiseInput.setPlaceholder(Text.literal("min " + minRaiseAmount));
 
             String newStatus = obj.get("status").getAsString();
             if (!newStatus.equals(prevStatus) && !newStatus.isEmpty()) {

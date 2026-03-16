@@ -37,6 +37,7 @@ public class PokerLobbyScreen extends Screen {
     private static final int C_CYAN  = 0xFF88EEFF;
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private String stateJson = "{}";
     private int framesOpen = 0;
 

@@ -51,15 +51,18 @@ public class BangNetworking {
         @Override public CustomPayload.Id<? extends CustomPayload> getId() { return ID; }
     }
 
-    public static String serializeState(BangGame game, ServerPlayerEntity viewer) {
+    public static String serializeState(BangGame game, ServerPlayerEntity viewer, int stateSequence) {
         String viewerName = viewer.getName().getString();
         JsonObject root = new JsonObject();
+        root.addProperty("stateSequence", stateSequence);
         root.addProperty("phase", game.getPhase().name());
         root.addProperty("status", game.getStatusMessage());
         if ((game.getPhase() == BangGame.Phase.REACTING || game.getPhase() == BangGame.Phase.GATLING_REACT || game.getPhase() == BangGame.Phase.INDIANS_REACT) && game.getReactingTargetName() != null) {
             root.addProperty("reactingTarget", game.getReactingTargetName());
-            if (game.getPhase() != BangGame.Phase.INDIANS_REACT)
+            if (game.getPhase() != BangGame.Phase.INDIANS_REACT) {
                 root.addProperty("canUseBarrel", game.canTargetUseBarrel(game.getReactingTargetName()));
+                root.addProperty("canUseJourdonnais", game.canTargetUseJourdonnais(game.getReactingTargetName()));
+            }
         }
         if (game.getPhase() == BangGame.Phase.DUEL_PLAY) {
             root.addProperty("duelAttacker", game.getDuelAttackerName());
@@ -91,6 +94,21 @@ public class BangNetworking {
         root.addProperty("jailPlayerIndex", game.getJailPlayerIndex());
         if (game.getPhase() == BangGame.Phase.GAME_OVER && game.getGameOverWinner() != null)
             root.addProperty("gameOverWinner", game.getGameOverWinner());
+        if (game.getPhase() == BangGame.Phase.DRAW_CHOICE) {
+            root.addProperty("drawChoiceCharacter", game.getDrawChoiceCharacter());
+        }
+        if (game.getPhase() == BangGame.Phase.KIT_DISCARD) {
+            root.addProperty("kitDiscardPlayer", game.getCurrentPlayerName());
+            JsonArray kitCards = new JsonArray();
+            for (var c : game.getPendingKitCarlsonCards()) kitCards.add(c.toCode());
+            root.add("kitCarlsonCards", kitCards);
+        }
+        if (game.getPhase() == BangGame.Phase.CHARACTER_SELECT) {
+            JsonArray opts = new JsonArray();
+            for (int id : game.getCharacterSelectOptionsFor(viewerName)) opts.add(id);
+            root.add("characterSelectOptions", opts);
+            root.addProperty("characterSelectTicks", game.getCharacterSelectTicks());
+        }
 
         JsonArray playersArr = new JsonArray();
         int heroIdx = -1;
@@ -100,6 +118,7 @@ public class BangNetworking {
             po.addProperty("name", p.name);
             po.addProperty("seatIndex", p.seatIndex);
             po.addProperty("role", p.role != null ? p.role.name() : "");
+            po.addProperty("characterId", p.characterId);
             po.addProperty("maxHp", p.maxHp);
             po.addProperty("hp", p.hp);
             po.addProperty("gapShoot", p.gapShoot);
@@ -147,8 +166,9 @@ public class BangNetworking {
     }
 
     public static void broadcastState(BangTableBlockEntity be) {
+        int seq = be.incrementAndGetStateSequence();
         for (ServerPlayerEntity sp : be.getViewers()) {
-            String json = serializeState(be.getGame(), sp);
+            String json = serializeState(be.getGame(), sp, seq);
             net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
                     sp, new BangStatePayload(be.getPos(), json));
         }
@@ -174,11 +194,28 @@ public class BangNetworking {
             case "PLAY_CARD" -> changed = be.getGame().playCard(name, amount, data);
             case "USE_MISS" -> changed = be.getGame().reactToBang(name, amount);
             case "USE_BARREL" -> changed = be.getGame().reactToBangWithBarrel(name);
+            case "USE_JOURDONNAIS" -> changed = be.getGame().reactToBangWithJourdonnais(name);
             case "INDIANS_REACT" -> changed = be.getGame().reactToIndians(name, amount);
             case "EQUIP_BLUE" -> changed = be.getGame().equipCard(name, amount, "replace".equals(data));
             case "CHOOSE_CARD" -> changed = be.getGame().chooseCardToGive(name, data);
             case "DUEL_BANG" -> changed = be.getGame().playDuelBang(name, amount);
             case "PASS_DUEL" -> changed = be.getGame().passDuel(name);
+            case "SELECT_CHARACTER" -> changed = be.getGame().selectCharacter(name, amount);
+            case "KIT_CARLSON_PICK" -> {
+                String[] parts = payload.data().split(",");
+                if (parts.length >= 2) {
+                    try {
+                        int i1 = Integer.parseInt(parts[0].trim());
+                        int i2 = Integer.parseInt(parts[1].trim());
+                        changed = be.getGame().kitCarlsonPick(name, i1, i2);
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            case "DRAW_CHOICE" -> changed = be.getGame().drawChoice(name, data);
+            case "SID_HEAL" -> {
+                int[] indices = parseDiscardIndices(data);
+                changed = indices.length >= 2 && be.getGame().sidKetchumHeal(name, indices[0], indices[1]);
+            }
             default -> {}
         }
         if (changed) {

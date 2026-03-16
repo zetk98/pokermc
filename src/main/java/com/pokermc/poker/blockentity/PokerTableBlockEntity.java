@@ -130,27 +130,30 @@ public class PokerTableBlockEntity extends BlockEntity {
         if (!(world instanceof ServerWorld sw)) return;
 
         Vec3d tableCenter = Vec3d.ofCenter(pos);
-        List<String> toForce = new ArrayList<>();
-
-        // Collect all participant names (active + pending)
         List<String> participants = new ArrayList<>();
         for (PokerGame.PlayerState ps : game.getPlayers()) participants.add(ps.name);
         participants.addAll(game.getPendingPlayers());
 
+        Set<String> toForce = new LinkedHashSet<>();
+        boolean anyoneTooFar = false;
+
         for (String name : participants) {
             ServerPlayerEntity sp = sw.getServer().getPlayerManager().getPlayer(name);
-
-            // Bị out bàn: disconnect / chết / mất điện
             if (sp == null || sp.isDisconnected() || !sp.isAlive()) {
                 toForce.add(name);
                 continue;
             }
-
-            // Bị out bàn: đẩy ra khỏi khu vực 5 ô
             if (sp.getSyncedPos().distanceTo(tableCenter) > MAX_DISTANCE) {
-                toForce.add(name);
-                sp.sendMessage(Text.literal("§e[Poker] §fBị out bàn (quá xa) - chip đã trả lại."), true);
-                continue;
+                anyoneTooFar = true;
+                break;
+            }
+        }
+        // Khi bất kỳ ai quá xa → toàn bộ out bàn
+        if (anyoneTooFar) {
+            toForce.addAll(participants);
+            for (String name : participants) {
+                var sp = sw.getServer().getPlayerManager().getPlayer(name);
+                if (sp != null) sp.sendMessage(Text.literal("§e[Poker] §fBàn đóng (có người quá xa) - chips trả lại."), true);
             }
         }
 

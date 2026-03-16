@@ -36,7 +36,7 @@ public class BangSettingsScreen extends Screen {
                 b -> { BangLang.set(BangLang.Lang.VI); init(); })
                 .dimensions(cx + gap/2, cy - btnH/2, btnW, btnH).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal(BangLang.tr("Back", "Quay lại")), b -> close())
+        addDrawableChild(ButtonWidget.builder(Text.literal(BangLang.tr("OK", "Xong")), b -> close())
                 .dimensions(cx - 40, cy + 40, 80, 20).build());
     }
 

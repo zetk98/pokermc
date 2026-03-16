@@ -2,6 +2,7 @@ package com.pokermc.bang.block;
 
 import com.mojang.serialization.MapCodec;
 import com.pokermc.bang.blockentity.BangTableBlockEntity;
+import com.pokermc.common.network.CloseGamePayload;
 import net.minecraft.block.*;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityTicker;
@@ -35,6 +36,20 @@ public class BangTableBlock extends BlockWithEntity {
     @Override
     public BlockEntity createBlockEntity(BlockPos pos, BlockState state) {
         return new BangTableBlockEntity(pos, state);
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onStateReplaced(BlockState state, net.minecraft.server.world.ServerWorld world, BlockPos pos, boolean moved) {
+        if (!moved) {
+            var be = world.getBlockEntity(pos);
+            if (be instanceof BangTableBlockEntity table) {
+                var viewers = table.getViewers();
+                for (var p : viewers) BangTableBlockEntity.clearPlayerTable(p.getUuid());
+                CloseGamePayload.sendToAll(viewers, pos);
+            }
+        }
+        super.onStateReplaced(state, world, pos, moved);
     }
 
     @Override

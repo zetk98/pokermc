@@ -40,6 +40,7 @@ public class BlackjackTableScreen extends Screen {
     private static final int C_BLUE = 0xFF4488FF;
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private String phase = "WAITING";
     private int maxBet = 100;
     private String currentPlayerName = "";

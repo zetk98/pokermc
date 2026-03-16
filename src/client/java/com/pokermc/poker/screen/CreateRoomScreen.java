@@ -29,6 +29,7 @@ public class CreateRoomScreen extends Screen {
     private static final int MIN_BALANCE_MULTIPLIER = 10;
 
     private final BlockPos tablePos;
+    public BlockPos getTablePos() { return tablePos; }
     private final String stateJson;
     private int bankBalance = 0;
     private int framesOpen = 0;

@@ -83,6 +83,30 @@ public class BangLang {
     public static final String CHARACTER_SLOT = "Character slot";
     // Ô nhân vật
 
+    /** Translate character ability to Vietnamese. */
+    public static String trAbility(int charId, String en) {
+        if (!isVi()) return en;
+        return switch (charId) {
+            case 1 -> "Người khác nhìn bạn +1 khoảng cách (như Mustang)";
+            case 2 -> "Khi bị sát thương: rút 1 từ tay kẻ tấn công";
+            case 3 -> "Khi ai chết: lấy hết bài của họ";
+            case 4 -> "Dùng BANG như MISS và ngược lại";
+            case 5 -> "Rút: lật lá thứ 2. Nếu Cơ/Rô → rút thêm 1";
+            case 6 -> "Bang không giới hạn mỗi lượt";
+            case 7 -> "Khi xét: rút 2, chọn 1, bỏ cả 2";
+            case 8 -> "Mỗi lượt: rút 3, giữ 2";
+            case 9 -> "Bạn nhìn người khác -1 khoảng cách (như Appaloosa)";
+            case 10 -> "Khi tay trống: rút 1";
+            case 11 -> "Khi mất 1 HP: rút 1";
+            case 12 -> "Giai đoạn rút: có thể lấy lá đầu từ tay 1 người";
+            case 13 -> "Mục tiêu cần 2 Miss để né Bang của bạn";
+            case 14 -> "Bỏ 2 lá để hồi 1 HP";
+            case 15 -> "Khi bị Bang: rút 1; nếu Cơ → né";
+            case 16 -> "Giai đoạn rút: có thể lấy lá trên cùng chồng bỏ";
+            default -> en;
+        };
+    }
+
     /** Translate status/log message to Vietnamese. Server sends English. */
     public static String translateLog(String en) {
         if (!isVi() || en == null || en.isEmpty()) return en;

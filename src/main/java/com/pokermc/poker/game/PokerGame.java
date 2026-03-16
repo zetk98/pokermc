@@ -47,6 +47,8 @@ public class PokerGame {
     private String lastWinner = "";
     private String lastWinningHand = "";
     private int lastPotWon = 0;
+    /** Tên người chia bài ván sau (người thắng ván trước, hoặc random nếu split). */
+    private String nextDealerName = "";
     private String statusMessage = "Waiting for players...";
     private long turnStartTick = 0;
 
@@ -134,6 +136,7 @@ public class PokerGame {
         lastWinner = "";
         lastWinningHand = "";
         lastPotWon = 0;
+        nextDealerName = "";
         statusMessage = "Waiting for players...";
         turnStartTick = 0;
     }
@@ -184,6 +187,8 @@ public class PokerGame {
         communityCards.clear();
         pot = 0;
         currentBet = 0;
+        // Chỉ reset dealer khi ván đầu (chưa có người thắng). Ván sau: dealer = người thắng ván trước (đã set trong endHand)
+        boolean isFirstGame = lastWinner.isEmpty();
         lastWinner = "";
         lastWinningHand = "";
         lastPotWon = 0;
@@ -197,7 +202,17 @@ public class PokerGame {
         }
 
         dealCardIndex = 0;
-        dealerIndex = 0; // Ván đầu: dealer = chủ phòng (room owner)
+        if (isFirstGame) {
+            dealerIndex = 0; // Ván đầu: dealer = chủ phòng (room owner)
+        } else {
+            // Tìm người chia bài theo tên (tránh lỗi khi có người rời giữa các ván)
+            int idx = -1;
+            for (int i = 0; i < players.size(); i++) {
+                if (players.get(i).name.equals(nextDealerName)) { idx = i; break; }
+            }
+            dealerIndex = idx >= 0 ? idx : 0; // Không tìm thấy → chủ phòng
+        }
+        nextDealerName = "";
         phase = Phase.DEALING;
         statusMessage = "Dealing cards...";
         return true;
@@ -436,7 +451,8 @@ public class PokerGame {
                 lastWinner = winner.name;
                 lastWinningHand = "Last player standing";
                 statusMessage = winner.name + " wins " + pot + " ZC! (everyone else folded)";
-                dealerIndex = players.indexOf(winner); // Ván sau: dealer = người thắng, sang phải
+                dealerIndex = players.indexOf(winner);
+                nextDealerName = winner.name; // Ván sau: chia cho người thắng trước
             }
         } else {
             // Showdown - evaluate hands, handle ties (split pot evenly)
@@ -474,6 +490,9 @@ public class PokerGame {
                 PlayerState nextDealer = winners.size() == 1 ? winners.get(0)
                         : winners.get(new Random().nextInt(winners.size()));
                 dealerIndex = players.indexOf(nextDealer);
+                nextDealerName = nextDealer.name;
+            } else {
+                nextDealerName = !players.isEmpty() ? players.get(0).name : ""; // Edge case: chủ phòng
             }
         }
 

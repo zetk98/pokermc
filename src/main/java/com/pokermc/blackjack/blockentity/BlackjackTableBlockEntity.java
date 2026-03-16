@@ -75,10 +75,12 @@ public class BlackjackTableBlockEntity extends BlockEntity {
             if (!(world instanceof ServerWorld sw)) return;
 
         Vec3d tableCenter = Vec3d.ofCenter(pos);
-        List<String> toForce = new ArrayList<>();
         List<String> participants = new ArrayList<>();
         for (BlackjackGame.PlayerState ps : game.getPlayers()) participants.add(ps.name);
         participants.addAll(game.getPendingPlayers());
+
+        List<String> toForce = new ArrayList<>();
+        boolean anyoneTooFar = false;
 
         for (String name : participants) {
             ServerPlayerEntity sp = sw.getServer().getPlayerManager().getPlayer(name);
@@ -87,8 +89,15 @@ public class BlackjackTableBlockEntity extends BlockEntity {
                 continue;
             }
             if (sp.getSyncedPos().distanceTo(tableCenter) > MAX_DISTANCE) {
-                toForce.add(name);
-                sp.sendMessage(Text.literal("§d[Blackjack] §fLeft table → forfeit!"), true);
+                anyoneTooFar = true;
+                break;
+            }
+        }
+        if (anyoneTooFar) {
+            toForce.addAll(participants);
+            for (String name : participants) {
+                var sp = sw.getServer().getPlayerManager().getPlayer(name);
+                if (sp != null) sp.sendMessage(Text.literal("§d[Blackjack] §fBàn đóng (có người quá xa) - chips trả lại."), true);
             }
         }
 

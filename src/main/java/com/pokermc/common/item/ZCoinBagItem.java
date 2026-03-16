@@ -38,9 +38,19 @@ public class ZCoinBagItem extends Item {
         return net.minecraft.util.ActionResult.SUCCESS;
     }
 
+    /** Config max. Legacy bag uses this. Container bag is limited by 9×64=576. */
     public static int getMaxCapacity() {
         int cap = com.pokermc.common.config.PokerConfig.get().zcoinBagMaxCapacity;
         return cap <= 0 ? 999999 : cap;
+    }
+
+    /** Actual space available. Container = 9×64 max; legacy = config max. Tránh mất ZC khi config > 576. */
+    public static int getAvailableSpace(ItemStack stack) {
+        if (stack.isEmpty() || !(stack.getItem() instanceof ZCoinBagItem)) return 0;
+        int balance = getBalance(stack);
+        var container = stack.get(net.minecraft.component.DataComponentTypes.CONTAINER);
+        int actualMax = (container != null) ? 9 * 64 : getMaxCapacity();
+        return Math.max(0, actualMax - balance);
     }
 
     public static int getBalance(ItemStack stack) {
