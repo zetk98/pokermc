@@ -195,21 +195,21 @@ public class StockExchangeScreen extends Screen {
         final int owned = ownedQty;
         final int price = (data != null && data.price > 0) ? data.price : 100;
 
-        // BUY button - opens popup
+        // BUY button - opens popup (moved closer to bottom edge)
         addDrawableChild(ButtonWidget.builder(
                 Text.literal("BUY").formatted(Formatting.GREEN),
                 btn -> {
                     client.setScreen(new StockTradeScreen(this, pos, type, price, playerBalance, owned, true));
                 }
-        ).dimensions(guiX + 60, y + 125, 100, 24).build());
+        ).dimensions(guiX + 60, y + 140, 100, 24).build());
 
-        // SELL button - opens popup
+        // SELL button - opens popup (moved closer to bottom edge)
         addDrawableChild(ButtonWidget.builder(
                 Text.literal("SELL").formatted(Formatting.RED),
                 btn -> {
                     client.setScreen(new StockTradeScreen(this, pos, type, price, playerBalance, owned, false));
                 }
-        ).dimensions(guiX + 180, y + 125, 100, 24).build());
+        ).dimensions(guiX + 180, y + 140, 100, 24).build());
     }
 
     // ============================================================

@@ -18,6 +18,9 @@ import com.pokermc.bang.blockentity.BangTableBlockEntity;
 import com.pokermc.blackjack.blockentity.BlackjackTableBlockEntity;
 import com.pokermc.poker.blockentity.PokerTableBlockEntity;
 import com.pokermc.xoso.blockentity.XosoBlockEntity;
+import com.pokermc.taixiu.block.TaiXiuTableBlock;
+import com.pokermc.taixiu.blockentity.TaiXiuTableBlockEntity;
+import com.pokermc.taixiu.network.TaiXiuNetworking;
 import com.pokermc.bang.network.BangNetworking;
 import com.pokermc.blackjack.network.BlackjackNetworking;
 import com.pokermc.market.game.MarketTicker;
@@ -64,6 +67,7 @@ public class PokerMod implements ModInitializer {
     public static MarketBlock MARKET_BLOCK;
     public static GoldenTicketBlock GOLDEN_TICKET_BLOCK;
     public static StockExchangeBlock STOCK_EXCHANGE_BLOCK;
+    public static TaiXiuTableBlock TAIXIU_TABLE_BLOCK;
     public static BlockItem POKER_TABLE_ITEM;
     public static BlockItem BLACKJACK_TABLE_ITEM;
     public static BlockItem BANG_TABLE_ITEM;
@@ -71,6 +75,7 @@ public class PokerMod implements ModInitializer {
     public static BlockItem MARKET_TABLE_ITEM;
     public static BlockItem GOLDEN_TICKET_TABLE_ITEM;
     public static BlockItem STOCK_EXCHANGE_ITEM;
+    public static BlockItem TAIXIU_TABLE_ITEM;
     public static ZCoinItem ZCOIN_ITEM;
     public static ZCoinBagItem ZCOIN_BAG_ITEM;
     public static LotteryTicketItem LOTTERY_TICKET_ITEM;
@@ -83,6 +88,7 @@ public class PokerMod implements ModInitializer {
     public static BlockEntityType<MarketBlockEntity> MARKET_BLOCK_ENTITY;
     public static BlockEntityType<GoldenTicketBlockEntity> GOLDEN_TICKET_BLOCK_ENTITY;
     public static BlockEntityType<StockExchangeBlockEntity> STOCK_EXCHANGE_BLOCK_ENTITY;
+    public static BlockEntityType<TaiXiuTableBlockEntity> TAIXIU_TABLE_BLOCK_ENTITY;
 
     private static <T extends Block> T registerBlock(String name, T block, boolean withItem) {
         RegistryKey<Block> blockKey = RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, name));
@@ -102,6 +108,7 @@ public class PokerMod implements ModInitializer {
         PokerConfig.get();
         LotteryPrizeScheduler.register();
         MarketTicker.register();
+        com.pokermc.taixiu.game.TaiXiuGameManager.register();
         PokerComponents.ZCOIN_BAG_BALANCE.toString(); // ensure components are registered
         PokerComponents.LOTTERY_TICKET_NUMBER.toString();
         PokerComponents.LOTTERY_TICKET_DAY.toString();
@@ -171,6 +178,15 @@ public class PokerMod implements ModInitializer {
                 true);
         STOCK_EXCHANGE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "stock_exchange"));
 
+        TAIXIU_TABLE_BLOCK = registerBlock("taixiu_table", new TaiXiuTableBlock(
+                AbstractBlock.Settings.create()
+                        .mapColor(MapColor.RED)
+                        .strength(2.5f)
+                        .nonOpaque()
+                        .registryKey(RegistryKey.of(RegistryKeys.BLOCK, Identifier.of(MOD_ID, "taixiu_table")))),
+                true);
+        TAIXIU_TABLE_ITEM = (BlockItem) Registries.ITEM.get(Identifier.of(MOD_ID, "taixiu_table"));
+
         ZCOIN_ITEM = Registry.register(Registries.ITEM, Identifier.of(MOD_ID, "zcoin"),
                 new ZCoinItem(new Item.Settings().maxCount(64)
                         .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(MOD_ID, "zcoin")))
@@ -228,6 +244,11 @@ public class PokerMod implements ModInitializer {
                 Identifier.of(MOD_ID, "stock_exchange"),
                 net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(StockExchangeBlockEntity::new, STOCK_EXCHANGE_BLOCK).build()
         );
+        TAIXIU_TABLE_BLOCK_ENTITY = Registry.register(
+                Registries.BLOCK_ENTITY_TYPE,
+                Identifier.of(MOD_ID, "taixiu_table"),
+                net.fabricmc.fabric.api.object.builder.v1.block.entity.FabricBlockEntityTypeBuilder.create(TaiXiuTableBlockEntity::new, TAIXIU_TABLE_BLOCK).build()
+        );
 
         // Register S2C custom payloads
         PayloadTypeRegistry.playS2C().register(
@@ -275,6 +296,12 @@ public class PokerMod implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(
                 StockNetworking.StockStatePayload.ID,
                 StockNetworking.StockStatePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                TaiXiuNetworking.OpenTaiXiuPayload.ID,
+                TaiXiuNetworking.OpenTaiXiuPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                TaiXiuNetworking.TaiXiuStatePayload.ID,
+                TaiXiuNetworking.TaiXiuStatePayload.CODEC);
 
         // Register C2S custom payloads
         PayloadTypeRegistry.playC2S().register(
@@ -301,6 +328,9 @@ public class PokerMod implements ModInitializer {
         PayloadTypeRegistry.playC2S().register(
                 StockNetworking.StockActionPayload.ID,
                 StockNetworking.StockActionPayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(
+                TaiXiuNetworking.TaiXiuActionPayload.ID,
+                TaiXiuNetworking.TaiXiuActionPayload.CODEC);
 
         // Handle incoming C2S player actions on the server
         ServerPlayNetworking.registerGlobalReceiver(
@@ -351,6 +381,12 @@ public class PokerMod implements ModInitializer {
                         () -> StockNetworking.handleAction(context.player(), payload)
                 )
         );
+        ServerPlayNetworking.registerGlobalReceiver(
+                TaiXiuNetworking.TaiXiuActionPayload.ID,
+                (payload, context) -> context.server().execute(
+                        () -> TaiXiuNetworking.handleAction(context.player(), payload)
+                )
+        );
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(CommandManager.literal("day").executes(context -> {
@@ -381,6 +417,7 @@ public class PokerMod implements ModInitializer {
                             entries.add(GOLDEN_TICKET_ITEM);
                             entries.add(STOCK_EXCHANGE_ITEM);
                             entries.add(STOCK_CERTIFICATE_ITEM);
+                            entries.add(TAIXIU_TABLE_ITEM);
                         })
                         .build());
 

@@ -5,8 +5,11 @@
   "block.casinocraft.xoso_table": "Lottery",
   "block.casinocraft.golden_ticket_table": "Golden Ticket",
   "block.casinocraft.market": "Market",
+  "block.casinocraft.stock_exchange": "Stock Exchange",
+  "block.casinocraft.taixiu_table": "Tai Xiu Table",
   "item.casinocraft.lottery_ticket": "Lottery Ticket",
   "item.casinocraft.golden_ticket": "Golden Ticket",
+  "item.casinocraft.stock_certificate": "Stock Certificate",
   "item.casinocraft.zcoin": "ZCoin",
   "item.casinocraft.zcoin_bag": "ZCoin Bag",
   "itemGroup.casinocraft": "CasinoCraft"

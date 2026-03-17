@@ -2,7 +2,7 @@
   "parent": "minecraft:block/cube_bottom_top",
   "textures": {
     "top": "casinocraft:block/market_top",
-    "bottom": "casinocraft:block/blackjack_table_side",
-    "side": "casinocraft:block/blackjack_table_side"
+    "bottom": "casinocraft:block/market_side",
+    "side": "casinocraft:block/market_side"
   }
 }

@@ -23,6 +23,8 @@ import com.pokermc.market.network.MarketNetworking;
 import com.pokermc.market.screen.MarketScreen;
 import com.pokermc.xoso.network.XosoNetworking;
 import com.pokermc.xoso.screen.XosoTableScreen;
+import com.pokermc.taixiu.network.TaiXiuNetworking;
+import com.pokermc.taixiu.screen.TaiXiuTableScreen;
 import com.pokermc.common.screen.TradeScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -268,6 +270,45 @@ public class PokerModClient implements ClientModInitializer {
         );
 
         ClientPlayNetworking.registerGlobalReceiver(
+                TaiXiuNetworking.OpenTaiXiuPayload.ID,
+                (payload, context) -> {
+                    context.client().execute(() -> {
+                        try {
+                            TaiXiuTableScreen screen = new TaiXiuTableScreen(payload.pos(), payload.stateJson());
+                            context.client().setScreen(screen);
+                            screen.updateState(payload.stateJson());
+                        } catch (Exception e) {
+                            System.err.println("[CasinoCraft] Tai Xiu error: " + e.getMessage());
+                        }
+                    });
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                TaiXiuNetworking.TaiXiuStatePayload.ID,
+                (payload, context) -> {
+                    // Debug: Log state updates
+                    try {
+                        var obj = com.google.gson.JsonParser.parseString(payload.stateJson()).getAsJsonObject();
+                        String stateStr = obj.has("state") ? obj.get("state").getAsString() : "?";
+                        long time = obj.has("currentTime") ? obj.get("currentTime").getAsLong() : 0;
+                        // Log every second (20 ticks) to reduce spam
+                        if (time % 20 == 0) {
+                            System.out.println("[Tai Xiu Client] Received state update: " + stateStr + " at time " + time);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[Tai Xiu Client] Error parsing state: " + e.getMessage());
+                    }
+                    context.client().execute(() -> {
+                        Screen s = context.client().currentScreen;
+                        if (s instanceof TaiXiuTableScreen tts) {
+                            tts.updateState(payload.stateJson());
+                        }
+                    });
+                }
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
                 CloseGamePayload.ID,
                 (payload, context) -> context.client().execute(() -> {
                     Screen s = context.client().currentScreen;
@@ -282,6 +323,7 @@ public class PokerModClient implements ClientModInitializer {
                     else if (s instanceof XosoTableScreen xts) screenPos = xts.getTablePos();
                     else if (s instanceof MarketScreen ms) screenPos = ms.getTablePos();
                     else if (s instanceof StockExchangeScreen ses) screenPos = ses.getPos();
+                    else if (s instanceof TaiXiuTableScreen tts) screenPos = tts.getPos();
                     else if (s instanceof GoldenTicketScreen gts) screenPos = gts.getTablePos();
                     else if (s instanceof TradeScreen ts) screenPos = ts.getTablePos();
                     else if (s instanceof CreateRoomScreen crs) screenPos = crs.getTablePos();

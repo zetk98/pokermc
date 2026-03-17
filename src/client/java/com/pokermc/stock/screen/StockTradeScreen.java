@@ -112,10 +112,10 @@ public class StockTradeScreen extends Screen {
                 }
         ).dimensions(guiX + 190, guiY + 80, 35, 18).build());
 
-        // CONFIRM button
+        // CONFIRM button - moved closer to bottom edge
         String btnText = isBuyMode ? "BUY" : "SELL";
         Formatting btnClr = isBuyMode ? Formatting.GREEN : Formatting.RED;
-        int btnY = isLimitOrder ? 180 : 160;
+        int btnY = isLimitOrder ? 215 : 175;
 
         addDrawableChild(ButtonWidget.builder(
                 Text.literal(btnText).formatted(btnClr),
@@ -126,7 +126,7 @@ public class StockTradeScreen extends Screen {
                 }
         ).dimensions(guiX + 90, btnY, 100, 24).build());
 
-        // CANCEL button
+        // CANCEL button - moved closer to bottom edge
         addDrawableChild(ButtonWidget.builder(
                 Text.literal("CANCEL").formatted(Formatting.GRAY),
                 btn -> close()
@@ -135,7 +135,7 @@ public class StockTradeScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        guiH = isLimitOrder ? 240 : 200;
+        guiH = isLimitOrder ? 250 : 210;
         guiY = (height - guiH) / 2;
 
         // Darken background
@@ -189,8 +189,8 @@ public class StockTradeScreen extends Screen {
             context.drawText(textRenderer, ownedQuantity + " shares", guiX + 210, guiY + 68, COLOR_TEXT_DIM, false);
         }
 
-        // Warning if insufficient funds/shares
-        int warningY = isLimitOrder ? 165 : 140;
+        // Warning if insufficient funds/shares - moved up to avoid button overlap
+        int warningY = isLimitOrder ? 155 : 130;
         if (isBuyMode && total > playerBalance) {
             context.drawText(textRenderer, "Insufficient funds!", guiX + 110, guiY + warningY, COLOR_RED, false);
         } else if (!isBuyMode && quantity > ownedQuantity) {
